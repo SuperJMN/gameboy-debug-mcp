@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\GameBoy.Debug.Core\GameBoy.Debug.Core.csproj" />
+    <ProjectReference Include="..\GameBoy.Debug.Symbols\GameBoy.Debug.Symbols.csproj" />
+    <ProjectReference Include="..\GameBoy.Debug.SameBoy\GameBoy.Debug.SameBoy.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+    <PackageReference Include="ModelContextProtocol" Version="1.4.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>gameboy-debug-mcp</AssemblyName>
+    <RootNamespace>GameBoy.Debug.Mcp</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
