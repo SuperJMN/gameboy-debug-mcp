@@ -40,6 +40,9 @@ internal static class SameBoyNative
     [DllImport(LibraryName, EntryPoint = "gbmcp_run_frame")]
     internal static extern int RunFrame(IntPtr session);
 
+    [DllImport(LibraryName, EntryPoint = "gbmcp_set_joypad")]
+    internal static extern int SetJoypad(IntPtr session, byte buttonMask);
+
     [DllImport(LibraryName, EntryPoint = "gbmcp_read_registers")]
     internal static extern int ReadRegisters(IntPtr session, out NativeRegisters registers);
 

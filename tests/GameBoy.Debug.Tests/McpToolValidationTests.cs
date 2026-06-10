@@ -35,6 +35,69 @@ public sealed class McpToolValidationTests
         Assert.Equal("2A", payload.BytesHex);
     }
 
+    [Fact]
+    public void Set_joypad_rejects_unknown_buttons_without_calling_session()
+    {
+        var session = new FakeDebugSession();
+
+        var result = GameBoyDebugTools.SetJoypad(session, ["right", "jump"]);
+
+        var error = Assert.IsType<ToolError>(result);
+        Assert.Equal("invalid_button", error.Error.Code);
+        Assert.False(session.SetJoypadCalled);
+    }
+
+    [Fact]
+    public void Set_joypad_sends_normalized_button_set_to_session()
+    {
+        var session = new FakeDebugSession
+        {
+            SetJoypadResult = DebugResult<JoypadStateResult>.Success(
+                new JoypadStateResult(true, false, false, false, true, false, false, false, ["right", "a"])),
+        };
+
+        var result = GameBoyDebugTools.SetJoypad(session, ["RIGHT", "a", "right"]);
+
+        var payload = Assert.IsType<JoypadStateResult>(result);
+        Assert.True(session.SetJoypadCalled);
+        Assert.Equal([JoypadButton.Right, JoypadButton.A], session.LastJoypadButtons);
+        Assert.Equal(["right", "a"], payload.Pressed);
+    }
+
+    [Fact]
+    public void Press_buttons_validates_frame_count_before_calling_session()
+    {
+        var session = new FakeDebugSession();
+
+        var result = GameBoyDebugTools.PressButtons(session, ["a"], 0);
+
+        var error = Assert.IsType<ToolError>(result);
+        Assert.Equal("invalid_frame_count", error.Error.Code);
+        Assert.False(session.PressButtonsCalled);
+    }
+
+    [Fact]
+    public void Press_buttons_sends_normalized_button_set_and_frame_count_to_session()
+    {
+        var registers = new CpuRegisters(
+            "0x0000", "0x0000", "0x0000", "0x0000", "0xFFFE", "0x0150",
+            "0x00", "0x00", "0x00", "0x00", "0x00", "0x00", "0x00", "0x00",
+            false, false);
+        var session = new FakeDebugSession
+        {
+            PressButtonsResult = DebugResult<PressButtonsResult>.Success(
+                new PressButtonsResult(5, new JoypadStateResult(false, false, false, false, false, false, false, false, []), registers)),
+        };
+
+        var result = GameBoyDebugTools.PressButtons(session, ["left", "b"], 5);
+
+        var payload = Assert.IsType<PressButtonsResult>(result);
+        Assert.True(session.PressButtonsCalled);
+        Assert.Equal([JoypadButton.Left, JoypadButton.B], session.LastPressedButtons);
+        Assert.Equal(5, session.LastPressFrameCount);
+        Assert.Equal(5, payload.FramesRun);
+    }
+
     private sealed class FakeDebugSession : IGameBoyDebugSession
     {
         public bool ReadMemoryCalled { get; private set; }
@@ -43,8 +106,24 @@ public sealed class McpToolValidationTests
 
         public int LastReadLength { get; private set; }
 
+        public bool SetJoypadCalled { get; private set; }
+
+        public IReadOnlyList<JoypadButton> LastJoypadButtons { get; private set; } = [];
+
+        public bool PressButtonsCalled { get; private set; }
+
+        public IReadOnlyList<JoypadButton> LastPressedButtons { get; private set; } = [];
+
+        public int LastPressFrameCount { get; private set; }
+
         public DebugResult<MemoryReadResult> ReadMemoryResult { get; init; } =
             DebugResult<MemoryReadResult>.Failure("not_configured", "The fake session was not configured.");
+
+        public DebugResult<JoypadStateResult> SetJoypadResult { get; init; } =
+            DebugResult<JoypadStateResult>.Failure("not_configured", "The fake session was not configured.");
+
+        public DebugResult<PressButtonsResult> PressButtonsResult { get; init; } =
+            DebugResult<PressButtonsResult>.Failure("not_configured", "The fake session was not configured.");
 
         public DebugResult<LoadRomResult> LoadRom(string path) => throw new NotSupportedException();
 
@@ -53,6 +132,21 @@ public sealed class McpToolValidationTests
         public DebugResult<StepInstructionResult> StepInstruction(int count) => throw new NotSupportedException();
 
         public DebugResult<RunFrameResult> RunFrame(int count) => throw new NotSupportedException();
+
+        public DebugResult<JoypadStateResult> SetJoypad(IReadOnlyList<JoypadButton> pressedButtons)
+        {
+            SetJoypadCalled = true;
+            LastJoypadButtons = pressedButtons.ToArray();
+            return SetJoypadResult;
+        }
+
+        public DebugResult<PressButtonsResult> PressButtons(IReadOnlyList<JoypadButton> pressedButtons, int frameCount)
+        {
+            PressButtonsCalled = true;
+            LastPressedButtons = pressedButtons.ToArray();
+            LastPressFrameCount = frameCount;
+            return PressButtonsResult;
+        }
 
         public DebugResult<ContinueResult> ContinueUntilBreak(int maxInstructions) => throw new NotSupportedException();
 

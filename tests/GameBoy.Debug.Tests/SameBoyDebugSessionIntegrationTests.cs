@@ -1,3 +1,4 @@
+using GameBoy.Debug.Core;
 using GameBoy.Debug.SameBoy;
 
 namespace GameBoy.Debug.Tests;
@@ -133,6 +134,42 @@ public sealed class SameBoyDebugSessionIntegrationTests
         }
     }
 
+    [Fact]
+    public void Set_joypad_drives_sameboy_joyp_reads()
+    {
+        if (!NativeBridgeExists())
+        {
+            return;
+        }
+
+        var romPath = Path.Combine(Path.GetTempPath(), $"gameboy-debug-mcp-joypad-{Guid.NewGuid():N}.gb");
+        CreateJoypadReadRom(romPath);
+
+        try
+        {
+            using var session = new SameBoyDebugSession();
+
+            var loaded = session.LoadRom(romPath);
+            Assert.True(loaded.IsSuccess, loaded.Error?.Message);
+
+            var joypad = session.SetJoypad([JoypadButton.A, JoypadButton.Right]);
+            Assert.True(joypad.IsSuccess, joypad.Error?.Message);
+            Assert.Equal(["right", "a"], joypad.Value.Pressed);
+
+            var frame = session.RunFrame(1);
+            Assert.True(frame.IsSuccess, frame.Error?.Message);
+
+            var memory = session.ReadMemory(0xC000, 2);
+            Assert.True(memory.IsSuccess, memory.Error?.Message);
+            Assert.True((memory.Value.Bytes[0] & 0x0F) == 0x0E, memory.Value.BytesHex);
+            Assert.True((memory.Value.Bytes[1] & 0x0F) == 0x0E, memory.Value.BytesHex);
+        }
+        finally
+        {
+            File.Delete(romPath);
+        }
+    }
+
     private static bool NativeBridgeExists()
     {
         var root = FindRepoRoot();
@@ -190,6 +227,49 @@ public sealed class SameBoyDebugSessionIntegrationTests
         rom[0x10B] = 0x18; // JR $010B
         rom[0x10C] = 0xFE;
         var title = "LYWAIT"u8.ToArray();
+        Array.Copy(title, 0, rom, 0x134, title.Length);
+        rom[0x147] = 0x00;
+        rom[0x148] = 0x00;
+        rom[0x149] = 0x00;
+        File.WriteAllBytes(path, rom);
+    }
+
+    private static void CreateJoypadReadRom(string path)
+    {
+        var rom = Enumerable.Repeat((byte)0x00, 0x8000).ToArray();
+        rom[0x100] = 0xC3; // JP $0150
+        rom[0x101] = 0x50;
+        rom[0x102] = 0x01;
+        var offset = 0x150;
+        byte[] program =
+        [
+            0x3E, 0x10,       // LD A, $10 - select action buttons
+            0xE0, 0x00,       // LDH [$00], A
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0xF0, 0x00,       // LDH A, [$00]
+            0xF0, 0x00,       // LDH A, [$00]
+            0xF0, 0x00,       // LDH A, [$00]
+            0xF0, 0x00,       // LDH A, [$00]
+            0xEA, 0x00, 0xC0, // LD [$C000], A
+            0x3E, 0x20,       // LD A, $20 - select d-pad
+            0xE0, 0x00,       // LDH [$00], A
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0xF0, 0x00,       // LDH A, [$00]
+            0xF0, 0x00,       // LDH A, [$00]
+            0xF0, 0x00,       // LDH A, [$00]
+            0xF0, 0x00,       // LDH A, [$00]
+            0xEA, 0x01, 0xC0, // LD [$C001], A
+            0x18, 0xFE,       // JR $
+        ];
+
+        Array.Copy(program, 0, rom, offset, program.Length);
+        var title = "JOYREAD"u8.ToArray();
         Array.Copy(title, 0, rom, 0x134, title.Length);
         rom[0x147] = 0x00;
         rom[0x148] = 0x00;

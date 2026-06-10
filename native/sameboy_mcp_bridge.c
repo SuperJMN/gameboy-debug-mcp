@@ -133,6 +133,7 @@ static void configure_core(gbmcp_session_t *session)
     GB_set_rgb_encode_callback(session->gb, rgb_encode);
     GB_set_pixels_output(session->gb, session->pixels);
     GB_set_border_mode(session->gb, GB_BORDER_NEVER);
+    GB_set_emulate_joypad_bouncing(session->gb, false);
 }
 
 static void write_post_boot_io(GB_gameboy_t *gb, uint16_t address, uint8_t value)
@@ -306,6 +307,14 @@ GBMCP_EXPORT int gbmcp_run_frame(gbmcp_session_t *session)
 {
     if (!session || !session->loaded) return -1;
     GB_run_frame(session->gb);
+    return 0;
+}
+
+GBMCP_EXPORT int gbmcp_set_joypad(gbmcp_session_t *session, uint8_t button_mask)
+{
+    if (!session || !session->loaded) return -1;
+
+    GB_set_key_mask(session->gb, (GB_key_mask_t)button_mask);
     return 0;
 }
 

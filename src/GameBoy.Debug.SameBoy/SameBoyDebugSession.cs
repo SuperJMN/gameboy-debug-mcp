@@ -10,6 +10,17 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
     private const int ScreenWidth = 160;
     private const int ScreenHeight = 144;
     private const int ScreenPixelCount = ScreenWidth * ScreenHeight;
+    private static readonly JoypadButton[] CanonicalButtons =
+    [
+        JoypadButton.Right,
+        JoypadButton.Left,
+        JoypadButton.Up,
+        JoypadButton.Down,
+        JoypadButton.A,
+        JoypadButton.B,
+        JoypadButton.Select,
+        JoypadButton.Start,
+    ];
     private readonly BreakpointCollection breakpoints = new();
     private readonly SymbolService symbols = new();
     private readonly string artifactDirectory;
@@ -115,6 +126,48 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
         }
 
         return DebugResult<RunFrameResult>.Success(new RunFrameResult(count, registers.Value, breakpoints.Contains(ParseWord(registers.Value.Pc))));
+    }
+
+    public DebugResult<JoypadStateResult> SetJoypad(IReadOnlyList<JoypadButton> pressedButtons)
+    {
+        var native = EnsureHandle<JoypadStateResult>();
+        if (!native.IsSuccess)
+        {
+            return native;
+        }
+
+        var mask = ToButtonMask(pressedButtons);
+        if (!mask.IsSuccess)
+        {
+            return DebugResult<JoypadStateResult>.Failure(mask.Error!.Code, mask.Error.Message);
+        }
+
+        return SameBoyNative.SetJoypad(handle, mask.Value) == 0
+            ? DebugResult<JoypadStateResult>.Success(ToJoypadState(mask.Value))
+            : NativeFailure<JoypadStateResult>("set_joypad_failed");
+    }
+
+    public DebugResult<PressButtonsResult> PressButtons(IReadOnlyList<JoypadButton> pressedButtons, int frameCount)
+    {
+        var pressed = SetJoypad(pressedButtons);
+        if (!pressed.IsSuccess)
+        {
+            return DebugResult<PressButtonsResult>.Failure(pressed.Error!.Code, pressed.Error.Message);
+        }
+
+        var run = RunFrame(frameCount);
+        var released = SetJoypad([]);
+        if (!run.IsSuccess)
+        {
+            return DebugResult<PressButtonsResult>.Failure(run.Error!.Code, run.Error.Message);
+        }
+
+        if (!released.IsSuccess)
+        {
+            return DebugResult<PressButtonsResult>.Failure(released.Error!.Code, released.Error.Message);
+        }
+
+        return DebugResult<PressButtonsResult>.Success(new PressButtonsResult(run.Value.FramesRun, released.Value, run.Value.Registers));
     }
 
     public DebugResult<ContinueResult> ContinueUntilBreak(int maxInstructions)
@@ -466,6 +519,54 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
         return SameBoyNative.Step(handle) == 0
             ? DebugResult<bool>.Success(true)
             : NativeFailure<bool>("step_instruction_failed");
+    }
+
+    private static DebugResult<byte> ToButtonMask(IReadOnlyList<JoypadButton> pressedButtons)
+    {
+        byte mask = 0;
+        foreach (var button in pressedButtons)
+        {
+            if ((int)button is < 0 or > 7)
+            {
+                return DebugResult<byte>.Failure("invalid_button", $"Unsupported joypad button value: {(int)button}.");
+            }
+
+            mask |= (byte)(1 << (int)button);
+        }
+
+        return DebugResult<byte>.Success(mask);
+    }
+
+    private static JoypadStateResult ToJoypadState(byte mask)
+    {
+        return new JoypadStateResult(
+            IsPressed(mask, JoypadButton.Right),
+            IsPressed(mask, JoypadButton.Left),
+            IsPressed(mask, JoypadButton.Up),
+            IsPressed(mask, JoypadButton.Down),
+            IsPressed(mask, JoypadButton.A),
+            IsPressed(mask, JoypadButton.B),
+            IsPressed(mask, JoypadButton.Select),
+            IsPressed(mask, JoypadButton.Start),
+            CanonicalButtons.Where(button => IsPressed(mask, button)).Select(ToButtonName).ToArray());
+    }
+
+    private static bool IsPressed(byte mask, JoypadButton button) => (mask & (1 << (int)button)) != 0;
+
+    private static string ToButtonName(JoypadButton button)
+    {
+        return button switch
+        {
+            JoypadButton.Right => "right",
+            JoypadButton.Left => "left",
+            JoypadButton.Up => "up",
+            JoypadButton.Down => "down",
+            JoypadButton.A => "a",
+            JoypadButton.B => "b",
+            JoypadButton.Select => "select",
+            JoypadButton.Start => "start",
+            _ => throw new ArgumentOutOfRangeException(nameof(button), button, null),
+        };
     }
 
     private DebugResult<T> EnsureHandle<T>()

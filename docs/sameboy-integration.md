@@ -16,7 +16,7 @@ Sources inspected:
 
 ## 1. Can We Link Directly Against SameBoy's Core API?
 
-Yes. SameBoy has a `make lib` target that builds `build/lib/libsameboy.so` on Linux. The public core API includes `GB_alloc`, `GB_init`, `GB_free`, `GB_dealloc`, `GB_load_rom`, `GB_reset`, `GB_run`, `GB_run_frame`, `GB_get_registers`, `GB_get_direct_access`, `GB_get_pixels_output`, and callback setup functions.
+Yes. SameBoy has a `make lib` target that builds `build/lib/libsameboy.so` on Linux. The public core API includes `GB_alloc`, `GB_init`, `GB_free`, `GB_dealloc`, `GB_load_rom`, `GB_reset`, `GB_run`, `GB_run_frame`, `GB_set_key_mask`, `GB_get_registers`, `GB_get_direct_access`, `GB_get_pixels_output`, and callback setup functions.
 
 The chosen approach links a small C bridge against `libsameboy.so` and calls that bridge from .NET via P/Invoke.
 
@@ -32,6 +32,8 @@ Stepping, memory, and registers are directly available:
 SameBoy's textual debugger has breakpoint support, but the public C header does not expose a stable breakpoint CRUD API. For the first version, C# owns a simple breakpoint collection and `continue_until_break` compares the current `PC` in a bounded step loop.
 
 Write tracing uses `GB_set_write_memory_callback`. The native bridge records the last observed writer for each 16-bit address and supports bounded `trace_until_write` execution.
+
+Joypad input uses `GB_set_key_mask` with the SameBoy button order from `Core/joypad.h`: right, left, up, down, A, B, select, start. The bridge disables `GB_set_emulate_joypad_bouncing` because MCP-driven tests should be deterministic instead of reproducing physical switch bounce noise.
 
 ## 3. Is The Textual Debugger Easier To Automate Initially?
 

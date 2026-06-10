@@ -10,6 +10,10 @@ public interface IGameBoyDebugSession
 
     DebugResult<RunFrameResult> RunFrame(int count);
 
+    DebugResult<JoypadStateResult> SetJoypad(IReadOnlyList<JoypadButton> pressedButtons);
+
+    DebugResult<PressButtonsResult> PressButtons(IReadOnlyList<JoypadButton> pressedButtons, int frameCount);
+
     DebugResult<ContinueResult> ContinueUntilBreak(int maxInstructions);
 
     DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition);

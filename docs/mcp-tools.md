@@ -63,6 +63,48 @@ Output:
 { "framesRun": 1, "registers": {}, "hitBreakpoint": false }
 ```
 
+## set_joypad
+
+Input:
+
+```json
+{ "buttons": ["right", "a"] }
+```
+
+Output:
+
+```json
+{
+  "right": true,
+  "left": false,
+  "up": false,
+  "down": false,
+  "a": true,
+  "b": false,
+  "select": false,
+  "start": false,
+  "pressed": ["right", "a"]
+}
+```
+
+Valid button names are `right`, `left`, `up`, `down`, `a`, `b`, `select`, and `start`. Pass an empty array to release every button. SameBoy's physical button-bounce emulation is disabled by the bridge so MCP-driven input is deterministic.
+
+## press_buttons
+
+Input:
+
+```json
+{ "buttons": ["a"], "frameCount": 6 }
+```
+
+Output:
+
+```json
+{ "framesRun": 6, "released": { "pressed": [] }, "registers": {} }
+```
+
+This holds the requested buttons for `frameCount` frames, then releases every button before returning. `frameCount` must be between 1 and 600.
+
 ## continue_until_break
 
 Input:

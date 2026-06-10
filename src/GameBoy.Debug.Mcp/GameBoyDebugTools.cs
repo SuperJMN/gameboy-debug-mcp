@@ -14,6 +14,18 @@ public static class GameBoyDebugTools
     private const int MaxContinueInstructions = 10_000_000;
     private const int MaxTraceInstructions = 10_000_000;
     private const int MaxTileCount = 384;
+    private static readonly IReadOnlyDictionary<string, JoypadButton> ButtonNames =
+        new Dictionary<string, JoypadButton>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["right"] = JoypadButton.Right,
+            ["left"] = JoypadButton.Left,
+            ["up"] = JoypadButton.Up,
+            ["down"] = JoypadButton.Down,
+            ["a"] = JoypadButton.A,
+            ["b"] = JoypadButton.B,
+            ["select"] = JoypadButton.Select,
+            ["start"] = JoypadButton.Start,
+        };
 
     [McpServerTool(Name = "load_rom", ReadOnly = false, Destructive = false)]
     [Description("Loads a Game Boy or Game Boy Color ROM into the active SameBoy debug session.")]
@@ -53,6 +65,31 @@ public static class GameBoyDebugTools
         }
 
         return ToToolResult(session.RunFrame(count));
+    }
+
+    [McpServerTool(Name = "set_joypad", ReadOnly = false, Destructive = false)]
+    [Description("Sets the currently held joypad buttons. Pass an empty array to release every button.")]
+    public static object SetJoypad(IGameBoyDebugSession session, string[] buttons)
+    {
+        var parsed = ParseButtons(buttons);
+        return parsed.IsSuccess
+            ? ToToolResult(session.SetJoypad(parsed.Value))
+            : new ToolError(parsed.Error!);
+    }
+
+    [McpServerTool(Name = "press_buttons", ReadOnly = false, Destructive = false)]
+    [Description("Holds one or more joypad buttons for a bounded number of frames, then releases them.")]
+    public static object PressButtons(IGameBoyDebugSession session, string[] buttons, int frameCount = 1)
+    {
+        if (frameCount is < 1 or > MaxFrameCount)
+        {
+            return Error("invalid_frame_count", $"frameCount must be between 1 and {MaxFrameCount}.");
+        }
+
+        var parsed = ParseButtons(buttons);
+        return parsed.IsSuccess
+            ? ToToolResult(session.PressButtons(parsed.Value, frameCount))
+            : new ToolError(parsed.Error!);
     }
 
     [McpServerTool(Name = "continue_until_break", ReadOnly = false, Destructive = false)]
@@ -264,7 +301,48 @@ public static class GameBoyDebugTools
 
     private static DebugResult<GameBoyAddress> ParseAddress(string address) => GameBoyAddress.Parse(address);
 
+    private static DebugResult<IReadOnlyList<JoypadButton>> ParseButtons(IReadOnlyList<string>? buttons)
+    {
+        if (buttons is null)
+        {
+            return DebugResult<IReadOnlyList<JoypadButton>>.Failure("invalid_buttons", "buttons is required. Use an empty array to release every button.");
+        }
+
+        var selected = new HashSet<JoypadButton>();
+        foreach (var rawButton in buttons)
+        {
+            var button = rawButton?.Trim();
+            if (string.IsNullOrEmpty(button))
+            {
+                return DebugResult<IReadOnlyList<JoypadButton>>.Failure("invalid_button", "Button names must not be empty.");
+            }
+
+            if (!ButtonNames.TryGetValue(button, out var parsed))
+            {
+                return DebugResult<IReadOnlyList<JoypadButton>>.Failure(
+                    "invalid_button",
+                    $"Unknown button '{button}'. Valid buttons: {string.Join(", ", ButtonNames.Keys)}.");
+            }
+
+            selected.Add(parsed);
+        }
+
+        return DebugResult<IReadOnlyList<JoypadButton>>.Success(CanonicalButtons.Where(selected.Contains).ToArray());
+    }
+
     private static object ToToolResult<T>(DebugResult<T> result) => result.IsSuccess ? result.Value! : new ToolError(result.Error!);
 
     private static ToolError Error(string code, string message) => new(new DebugError(code, message));
+
+    private static readonly JoypadButton[] CanonicalButtons =
+    [
+        JoypadButton.Right,
+        JoypadButton.Left,
+        JoypadButton.Up,
+        JoypadButton.Down,
+        JoypadButton.A,
+        JoypadButton.B,
+        JoypadButton.Select,
+        JoypadButton.Start,
+    ];
 }

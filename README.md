@@ -86,6 +86,8 @@ Implemented tools:
 - `reset`
 - `step_instruction`
 - `run_frame`
+- `set_joypad`
+- `press_buttons`
 - `continue_until_break`
 - `set_breakpoint`
 - `clear_breakpoint`
@@ -113,10 +115,11 @@ See [docs/mcp-tools.md](docs/mcp-tools.md) for schemas and examples.
 - Breakpoints are managed by the C# session loop by comparing `PC` before/after stepping. SameBoy's richer conditional breakpoint engine is not exposed yet.
 - `.sym` parsing is intentionally simple: `BANK:ADDR Name` and `ADDR Name` lines with `;` or `#` comments.
 - `capture_screen` writes BMP files.
+- Joypad control disables SameBoy's physical button-bounce emulation so MCP-driven tests are deterministic.
 
 ## SameBoy Approach
 
-SameBoy exposes the core operations this server needs through its C API: ROM loading, reset, stepping via `GB_run`, frame execution, registers, memory, direct OAM access, disassembly logging, and framebuffer output. The bridge in `native/sameboy_mcp_bridge.c` converts those APIs into stable P/Invoke-friendly functions.
+SameBoy exposes the core operations this server needs through its C API: ROM loading, reset, stepping via `GB_run`, frame execution, joypad input, registers, memory, direct OAM access, disassembly logging, and framebuffer output. The bridge in `native/sameboy_mcp_bridge.c` converts those APIs into stable P/Invoke-friendly functions.
 
 See [docs/sameboy-integration.md](docs/sameboy-integration.md) for the research note.
 

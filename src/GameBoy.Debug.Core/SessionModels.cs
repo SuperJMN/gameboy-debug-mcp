@@ -20,6 +20,34 @@ public sealed record RunFrameResult(
     [property: JsonPropertyName("registers")] CpuRegisters Registers,
     [property: JsonPropertyName("hitBreakpoint")] bool HitBreakpoint);
 
+public enum JoypadButton
+{
+    Right = 0,
+    Left = 1,
+    Up = 2,
+    Down = 3,
+    A = 4,
+    B = 5,
+    Select = 6,
+    Start = 7,
+}
+
+public sealed record JoypadStateResult(
+    [property: JsonPropertyName("right")] bool Right,
+    [property: JsonPropertyName("left")] bool Left,
+    [property: JsonPropertyName("up")] bool Up,
+    [property: JsonPropertyName("down")] bool Down,
+    [property: JsonPropertyName("a")] bool A,
+    [property: JsonPropertyName("b")] bool B,
+    [property: JsonPropertyName("select")] bool Select,
+    [property: JsonPropertyName("start")] bool Start,
+    [property: JsonPropertyName("pressed")] IReadOnlyList<string> Pressed);
+
+public sealed record PressButtonsResult(
+    [property: JsonPropertyName("framesRun")] int FramesRun,
+    [property: JsonPropertyName("released")] JoypadStateResult Released,
+    [property: JsonPropertyName("registers")] CpuRegisters Registers);
+
 public sealed record ContinueResult(
     [property: JsonPropertyName("stopped")] bool Stopped,
     [property: JsonPropertyName("reason")] string Reason,
