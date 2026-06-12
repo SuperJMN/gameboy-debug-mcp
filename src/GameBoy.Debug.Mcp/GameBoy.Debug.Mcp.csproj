@@ -14,10 +14,65 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>gameboy-debug-mcp</AssemblyName>
+    <AssemblyName>GameBoy.Mcp</AssemblyName>
     <RootNamespace>GameBoy.Debug.Mcp</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <!-- Distribution as a .NET tool (install with `dotnet tool install -g GameBoy.Mcp` or run with `dnx GameBoy.Mcp`) -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>gameboymcp</ToolCommandName>
+    <PackageId>GameBoy.Mcp</PackageId>
+    <Title>GameBoy.Mcp</Title>
+    <Description>MCP server for inspecting and controlling Game Boy and Game Boy Color ROMs running on the SameBoy core. Exposes CPU stepping, breakpoints, memory, PPU/VRAM inspection, savestates and inline screen captures over the Model Context Protocol.</Description>
+    <Authors>SuperJMN</Authors>
+    <Company>José Manuel Nieto (@SuperJMN)</Company>
+    <Product>GameBoy.Mcp</Product>
+    <PackageTags>mcp;model-context-protocol;gameboy;gameboy-color;sameboy;debugger;emulator;ai</PackageTags>
+    <PackageProjectUrl>https://github.com/SuperJMN/gameboy-debug-mcp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/SuperJMN/gameboy-debug-mcp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="" Visible="false" />
+  </ItemGroup>
+
+  <!-- Native SameBoy bridge: build it on demand and ship it inside the tool package -->
+  <PropertyGroup>
+    <RepoRoot>$(MSBuildThisFileDirectory)..\..\</RepoRoot>
+    <NativeRid>linux-x64</NativeRid>
+    <NativeOutDir>$(RepoRoot)native\out\$(NativeRid)</NativeOutDir>
+    <NativeBridgeLib>$(NativeOutDir)\libgameboy_debug_sameboy.so</NativeBridgeLib>
+    <NativeCoreLib>$(NativeOutDir)\libsameboy.so</NativeCoreLib>
+  </PropertyGroup>
+
+  <Target Name="BuildNativeBridge"
+          BeforeTargets="BeforeBuild;_GetPackageFiles"
+          Condition="!Exists('$(NativeBridgeLib)')">
+    <Message Importance="high" Text="Native SameBoy bridge not found at '$(NativeOutDir)'. Building it with scripts/build-native.sh..." />
+    <Exec Command="bash &quot;$(RepoRoot)scripts/build-native.sh&quot;" WorkingDirectory="$(RepoRoot)" />
+    <Error Condition="!Exists('$(NativeBridgeLib)')"
+           Text="Native SameBoy bridge build did not produce '$(NativeBridgeLib)'. Ensure git, make and cc/clang are installed." />
+  </Target>
+
+  <ItemGroup>
+    <None Include="$(NativeBridgeLib)">
+      <Link>libgameboy_debug_sameboy.so</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+    <None Include="$(NativeCoreLib)">
+      <Link>libsameboy.so</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Visible>false</Visible>
+    </None>
+  </ItemGroup>
 
 </Project>
