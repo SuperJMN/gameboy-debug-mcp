@@ -172,6 +172,62 @@ public sealed class McpToolValidationTests
         Assert.False(session.SetBreakpointCalled);
     }
 
+    [Fact]
+    public void Save_state_rejects_blank_path_without_calling_session()
+    {
+        var session = new FakeDebugSession();
+
+        var result = GameBoyDebugTools.SaveState(session, " ");
+
+        var error = Assert.IsType<ToolError>(result);
+        Assert.Equal("invalid_path", error.Error.Code);
+        Assert.False(session.SaveStateCalled);
+    }
+
+    [Fact]
+    public void Save_state_returns_session_payload_for_valid_path()
+    {
+        var session = new FakeDebugSession
+        {
+            SaveStateResult = DebugResult<SaveStateResult>.Success(new SaveStateResult(true, "state.s0")),
+        };
+
+        var result = GameBoyDebugTools.SaveState(session, "state.s0");
+
+        var payload = Assert.IsType<SaveStateResult>(result);
+        Assert.True(session.SaveStateCalled);
+        Assert.Equal("state.s0", session.LastSaveStatePath);
+        Assert.Equal("state.s0", payload.Path);
+    }
+
+    [Fact]
+    public void Load_state_rejects_blank_path_without_calling_session()
+    {
+        var session = new FakeDebugSession();
+
+        var result = GameBoyDebugTools.LoadState(session, "");
+
+        var error = Assert.IsType<ToolError>(result);
+        Assert.Equal("invalid_path", error.Error.Code);
+        Assert.False(session.LoadStateCalled);
+    }
+
+    [Fact]
+    public void Load_state_returns_session_payload_for_valid_path()
+    {
+        var session = new FakeDebugSession
+        {
+            LoadStateResult = DebugResult<LoadStateResult>.Success(new LoadStateResult(true, "state.s0")),
+        };
+
+        var result = GameBoyDebugTools.LoadState(session, "state.s0");
+
+        var payload = Assert.IsType<LoadStateResult>(result);
+        Assert.True(session.LoadStateCalled);
+        Assert.Equal("state.s0", session.LastLoadStatePath);
+        Assert.Equal("state.s0", payload.Path);
+    }
+
     private sealed class FakeDebugSession : IGameBoyDebugSession
     {
         public bool ReadMemoryCalled { get; private set; }
@@ -198,6 +254,14 @@ public sealed class McpToolValidationTests
 
         public bool SetBreakpointCalled { get; private set; }
 
+        public bool SaveStateCalled { get; private set; }
+
+        public string? LastSaveStatePath { get; private set; }
+
+        public bool LoadStateCalled { get; private set; }
+
+        public string? LastLoadStatePath { get; private set; }
+
         public DebugResult<MemoryReadResult> ReadMemoryResult { get; init; } =
             DebugResult<MemoryReadResult>.Failure("not_configured", "The fake session was not configured.");
 
@@ -216,7 +280,27 @@ public sealed class McpToolValidationTests
         public DebugResult<ScreenCaptureResult> CaptureScreenResult { get; init; } =
             DebugResult<ScreenCaptureResult>.Failure("not_configured", "The fake session was not configured.");
 
+        public DebugResult<SaveStateResult> SaveStateResult { get; init; } =
+            DebugResult<SaveStateResult>.Failure("not_configured", "The fake session was not configured.");
+
+        public DebugResult<LoadStateResult> LoadStateResult { get; init; } =
+            DebugResult<LoadStateResult>.Failure("not_configured", "The fake session was not configured.");
+
         public DebugResult<LoadRomResult> LoadRom(string path) => throw new NotSupportedException();
+
+        public DebugResult<SaveStateResult> SaveState(string path)
+        {
+            SaveStateCalled = true;
+            LastSaveStatePath = path;
+            return SaveStateResult;
+        }
+
+        public DebugResult<LoadStateResult> LoadState(string path)
+        {
+            LoadStateCalled = true;
+            LastLoadStatePath = path;
+            return LoadStateResult;
+        }
 
         public DebugResult<ResetResult> Reset() => throw new NotSupportedException();
 

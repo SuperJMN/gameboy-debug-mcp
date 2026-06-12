@@ -34,6 +34,12 @@ internal static class SameBoyNative
     [DllImport(LibraryName, EntryPoint = "gbmcp_reset")]
     internal static extern int Reset(IntPtr session);
 
+    [DllImport(LibraryName, EntryPoint = "gbmcp_save_state", CharSet = CharSet.Ansi)]
+    internal static extern int SaveState(IntPtr session, string path);
+
+    [DllImport(LibraryName, EntryPoint = "gbmcp_load_state", CharSet = CharSet.Ansi)]
+    internal static extern int LoadState(IntPtr session, string path);
+
     [DllImport(LibraryName, EntryPoint = "gbmcp_step")]
     internal static extern int Step(IntPtr session);
 

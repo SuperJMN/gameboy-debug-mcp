@@ -4,7 +4,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmultichar"
+#endif
 #include "gb.h"
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 #define GBMCP_WIDTH 160
 #define GBMCP_HEIGHT 144
@@ -293,6 +300,46 @@ GBMCP_EXPORT int gbmcp_reset(gbmcp_session_t *session)
     if (!session || !session->loaded) return -1;
     GB_reset(session->gb);
     apply_post_boot_state(session);
+    return 0;
+}
+
+GBMCP_EXPORT int gbmcp_save_state(gbmcp_session_t *session, const char *path)
+{
+    if (!session || !path) return -1;
+    if (!session->loaded) {
+        set_error(session, "No ROM is loaded.");
+        return -1;
+    }
+
+    int result = GB_save_state(session->gb, path);
+    if (result != 0) {
+        set_error(session, "SameBoy could not save the state.");
+        return result;
+    }
+
+    return 0;
+}
+
+GBMCP_EXPORT int gbmcp_load_state(gbmcp_session_t *session, const char *path)
+{
+    if (!session || !path) return -1;
+    if (!session->loaded) {
+        set_error(session, "No ROM is loaded.");
+        return -1;
+    }
+
+    int result = GB_load_state(session->gb, path);
+    if (result != 0) {
+        set_error(session, "SameBoy could not load the state.");
+        return result;
+    }
+
+    memset(session->last_writes, 0, sizeof(session->last_writes));
+    session->trace_active = false;
+    session->trace_hit = false;
+    session->trace_address = 0;
+    session->trace_pc = 0;
+    session->trace_value = 0;
     return 0;
 }
 

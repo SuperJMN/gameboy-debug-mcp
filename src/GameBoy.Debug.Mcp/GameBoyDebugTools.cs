@@ -40,6 +40,30 @@ public static class GameBoyDebugTools
         return ToToolResult(session.LoadRom(path));
     }
 
+    [McpServerTool(Name = "save_state", ReadOnly = false, Destructive = false)]
+    [Description("Saves the active emulator state to a SameBoy savestate file.")]
+    public static object SaveState(IGameBoyDebugSession session, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return Error("invalid_path", "Save state path is required.");
+        }
+
+        return ToToolResult(session.SaveState(path));
+    }
+
+    [McpServerTool(Name = "load_state", ReadOnly = false, Destructive = true)]
+    [Description("Loads a SameBoy savestate file into the active emulator session.")]
+    public static object LoadState(IGameBoyDebugSession session, string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return Error("invalid_path", "Save state path is required.");
+        }
+
+        return ToToolResult(session.LoadState(path));
+    }
+
     [McpServerTool(Name = "reset", ReadOnly = false, Destructive = false)]
     [Description("Resets the active emulator session.")]
     public static object Reset(IGameBoyDebugSession session) => ToToolResult(session.Reset());

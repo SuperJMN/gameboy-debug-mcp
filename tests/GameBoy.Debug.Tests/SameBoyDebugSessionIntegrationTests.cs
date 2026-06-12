@@ -5,6 +5,8 @@ namespace GameBoy.Debug.Tests;
 
 public sealed class SameBoyDebugSessionIntegrationTests
 {
+    private const string RealRomPath = "/home/jmn/.copilot/session-state/6dea9c9b-9db5-4e33-bbf9-2ab327d68574/files/rom/Super Mario Land 2 - 6 Golden Coins (USA, Europe).gb";
+
     [Fact]
     public void Set_breakpoint_rejects_invalid_condition_before_native_execution()
     {
@@ -24,7 +26,7 @@ public sealed class SameBoyDebugSessionIntegrationTests
             return;
         }
 
-        var romPath = Path.Combine(Path.GetTempPath(), $"gameboy-debug-mcp-{Guid.NewGuid():N}.gb");
+        var romPath = CreateTestFilePath("gameboy-debug-mcp", ".gb");
         var symPath = Path.ChangeExtension(romPath, ".sym");
         CreateMinimalRom(romPath);
         File.WriteAllLines(symPath, ["C000 Player.X"]);
@@ -151,7 +153,7 @@ public sealed class SameBoyDebugSessionIntegrationTests
             return;
         }
 
-        var romPath = Path.Combine(Path.GetTempPath(), $"gameboy-debug-mcp-ly-wait-{Guid.NewGuid():N}.gb");
+        var romPath = CreateTestFilePath("gameboy-debug-mcp-ly-wait", ".gb");
         CreateLyWaitRom(romPath);
 
         try
@@ -184,7 +186,7 @@ public sealed class SameBoyDebugSessionIntegrationTests
             return;
         }
 
-        var romPath = Path.Combine(Path.GetTempPath(), $"gameboy-debug-mcp-joypad-{Guid.NewGuid():N}.gb");
+        var romPath = CreateTestFilePath("gameboy-debug-mcp-joypad", ".gb");
         CreateJoypadReadRom(romPath);
 
         try
@@ -209,6 +211,63 @@ public sealed class SameBoyDebugSessionIntegrationTests
         finally
         {
             File.Delete(romPath);
+        }
+    }
+
+    [Fact]
+    public void Savestate_roundtrip_restores_registers_and_memory_from_real_rom()
+    {
+        if (!NativeBridgeExists() || !File.Exists(RealRomPath))
+        {
+            return;
+        }
+
+        var statePath = CreateTestFilePath("sameboy-savestate", ".s0");
+
+        try
+        {
+            using var session = new SameBoyDebugSession();
+
+            var loaded = session.LoadRom(RealRomPath);
+            Assert.True(loaded.IsSuccess, loaded.Error?.Message);
+
+            var frames = session.RunFrame(3);
+            Assert.True(frames.IsSuccess, frames.Error?.Message);
+
+            var registersBefore = session.ReadRegisters();
+            Assert.True(registersBefore.IsSuccess, registersBefore.Error?.Message);
+            var memoryBefore = session.ReadMemory(0xC000, 16);
+            Assert.True(memoryBefore.IsSuccess, memoryBefore.Error?.Message);
+
+            var saved = session.SaveState(statePath);
+            Assert.True(saved.IsSuccess, saved.Error?.Message);
+            Assert.True(saved.Value.Saved);
+            Assert.Equal(statePath, saved.Value.Path);
+            Assert.True(File.Exists(statePath));
+
+            var replacement = memoryBefore.Value.Bytes[0] == 0xA5 ? (byte)0x5A : (byte)0xA5;
+            var written = session.WriteMemory(0xC000, Enumerable.Repeat(replacement, 16).ToArray());
+            Assert.True(written.IsSuccess, written.Error?.Message);
+            var memoryAfterMutation = session.ReadMemory(0xC000, 16);
+            Assert.True(memoryAfterMutation.IsSuccess, memoryAfterMutation.Error?.Message);
+            Assert.NotEqual(memoryBefore.Value.BytesHex, memoryAfterMutation.Value.BytesHex);
+
+            var loadedState = session.LoadState(statePath);
+            Assert.True(loadedState.IsSuccess, loadedState.Error?.Message);
+            Assert.True(loadedState.Value.Loaded);
+            Assert.Equal(statePath, loadedState.Value.Path);
+
+            var registersAfter = session.ReadRegisters();
+            Assert.True(registersAfter.IsSuccess, registersAfter.Error?.Message);
+            var memoryAfter = session.ReadMemory(0xC000, 16);
+            Assert.True(memoryAfter.IsSuccess, memoryAfter.Error?.Message);
+
+            Assert.Equal(registersBefore.Value, registersAfter.Value);
+            Assert.Equal(memoryBefore.Value.BytesHex, memoryAfter.Value.BytesHex);
+        }
+        finally
+        {
+            File.Delete(statePath);
         }
     }
 
@@ -238,6 +297,14 @@ public sealed class SameBoyDebugSessionIntegrationTests
         }
 
         return null;
+    }
+
+    private static string CreateTestFilePath(string prefix, string extension)
+    {
+        var root = FindRepoRoot() ?? Directory.GetCurrentDirectory();
+        var directory = Path.Combine(root, "artifacts", "tests");
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, $"{prefix}-{Guid.NewGuid():N}{extension}");
     }
 
     private static void CreateMinimalRom(string path)

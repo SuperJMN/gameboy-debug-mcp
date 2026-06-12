@@ -16,6 +16,34 @@ Output:
 { "loaded": true, "romTitle": "GAME", "model": "DMG" }
 ```
 
+## save_state
+
+Input:
+
+```json
+{ "path": "path/to/state.s0" }
+```
+
+Output:
+
+```json
+{ "saved": true, "path": "path/to/state.s0" }
+```
+
+## load_state
+
+Input:
+
+```json
+{ "path": "path/to/state.s0" }
+```
+
+Output:
+
+```json
+{ "loaded": true, "path": "path/to/state.s0" }
+```
+
 ## reset
 
 Input:

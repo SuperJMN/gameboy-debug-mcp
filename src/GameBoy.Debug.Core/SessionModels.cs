@@ -7,6 +7,14 @@ public sealed record LoadRomResult(
     [property: JsonPropertyName("romTitle")] string RomTitle,
     [property: JsonPropertyName("model")] string Model);
 
+public sealed record SaveStateResult(
+    [property: JsonPropertyName("saved")] bool Saved,
+    [property: JsonPropertyName("path")] string Path);
+
+public sealed record LoadStateResult(
+    [property: JsonPropertyName("loaded")] bool Loaded,
+    [property: JsonPropertyName("path")] string Path);
+
 public sealed record ResetResult([property: JsonPropertyName("reset")] bool Reset);
 
 public sealed record StepInstructionResult(

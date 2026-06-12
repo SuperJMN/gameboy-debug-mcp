@@ -71,6 +71,47 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
             : NativeFailure<ResetResult>("reset_failed");
     }
 
+    public DebugResult<SaveStateResult> SaveState(string path)
+    {
+        var native = EnsureHandle<SaveStateResult>();
+        if (!native.IsSuccess)
+        {
+            return native;
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return DebugResult<SaveStateResult>.Failure("invalid_path", "Save state path is required.");
+        }
+
+        return SameBoyNative.SaveState(handle, path) == 0
+            ? DebugResult<SaveStateResult>.Success(new SaveStateResult(true, path))
+            : NativeFailure<SaveStateResult>("save_state_failed");
+    }
+
+    public DebugResult<LoadStateResult> LoadState(string path)
+    {
+        var native = EnsureHandle<LoadStateResult>();
+        if (!native.IsSuccess)
+        {
+            return native;
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return DebugResult<LoadStateResult>.Failure("invalid_path", "Save state path is required.");
+        }
+
+        if (!File.Exists(path))
+        {
+            return DebugResult<LoadStateResult>.Failure("state_not_found", $"Save state was not found: {path}");
+        }
+
+        return SameBoyNative.LoadState(handle, path) == 0
+            ? DebugResult<LoadStateResult>.Success(new LoadStateResult(true, path))
+            : NativeFailure<LoadStateResult>("load_state_failed");
+    }
+
     public DebugResult<StepInstructionResult> StepInstruction(int count)
     {
         var before = ReadRegisters();
