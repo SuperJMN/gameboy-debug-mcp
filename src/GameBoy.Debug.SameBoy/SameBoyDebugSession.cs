@@ -124,7 +124,13 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
             return DebugResult<RunFrameResult>.Failure(registers.Error!.Code, registers.Error.Message);
         }
 
-        return DebugResult<RunFrameResult>.Success(new RunFrameResult(count, registers.Value, breakpoints.Contains(ParseWord(registers.Value.Pc))));
+        var hitBreakpoint = IsBreakpointHit(ParseWord(registers.Value.Pc), registers.Value);
+        if (!hitBreakpoint.IsSuccess)
+        {
+            return DebugResult<RunFrameResult>.Failure(hitBreakpoint.Error!.Code, hitBreakpoint.Error.Message);
+        }
+
+        return DebugResult<RunFrameResult>.Success(new RunFrameResult(count, registers.Value, hitBreakpoint.Value));
     }
 
     public DebugResult<JoypadStateResult> SetJoypad(IReadOnlyList<JoypadButton> pressedButtons)
@@ -180,7 +186,13 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
             }
 
             var pcBefore = ParseWord(registersBefore.Value.Pc);
-            if (breakpoints.Contains(pcBefore))
+            var hitBreakpoint = IsBreakpointHit(pcBefore, registersBefore.Value);
+            if (!hitBreakpoint.IsSuccess)
+            {
+                return DebugResult<ContinueResult>.Failure(hitBreakpoint.Error!.Code, hitBreakpoint.Error.Message);
+            }
+
+            if (hitBreakpoint.Value)
             {
                 return Stop("breakpoint", registersBefore.Value);
             }
@@ -213,7 +225,14 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
 
     public DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition)
     {
-        var breakpoint = breakpoints.Set(address, condition);
+        if (!BreakpointCondition.TryParse(condition, out var parsedCondition, out var conditionError))
+        {
+            return DebugResult<BreakpointSetResult>.Failure(
+                "invalid_breakpoint_condition",
+                $"Invalid breakpoint condition: {conditionError}");
+        }
+
+        var breakpoint = breakpoints.Set(address, condition, parsedCondition);
         return DebugResult<BreakpointSetResult>.Success(new BreakpointSetResult(breakpoint.Id, breakpoint.Address, breakpoint.Enabled));
     }
 
@@ -510,6 +529,37 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
         disposed = true;
     }
 
+    private DebugResult<bool> ShouldBreak(BreakpointInfo breakpoint, CpuRegisters registers)
+    {
+        if (breakpoint.ParsedCondition is null)
+        {
+            return string.IsNullOrWhiteSpace(breakpoint.Condition)
+                ? DebugResult<bool>.Success(true)
+                : DebugResult<bool>.Failure("invalid_breakpoint_condition", $"Breakpoint '{breakpoint.Id}' has an invalid condition.");
+        }
+
+        return breakpoint.ParsedCondition.Evaluate(new BreakpointConditionContext(this, registers));
+    }
+
+    private DebugResult<bool> IsBreakpointHit(ushort address, CpuRegisters registers)
+    {
+        foreach (var breakpoint in breakpoints.FindAll(address))
+        {
+            var shouldBreak = ShouldBreak(breakpoint, registers);
+            if (!shouldBreak.IsSuccess)
+            {
+                return shouldBreak;
+            }
+
+            if (shouldBreak.Value)
+            {
+                return DebugResult<bool>.Success(true);
+            }
+        }
+
+        return DebugResult<bool>.Success(false);
+    }
+
     private DebugResult<byte[]> ReadBytes(ushort address, int length)
     {
         var native = EnsureHandle<byte[]>();
@@ -530,6 +580,19 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
         return bytes.IsSuccess
             ? DebugResult<byte>.Success(bytes.Value[0])
             : DebugResult<byte>.Failure(bytes.Error!.Code, bytes.Error.Message);
+    }
+
+    private sealed class BreakpointConditionContext(SameBoyDebugSession session, CpuRegisters registers) : IBreakpointConditionContext
+    {
+        public CpuRegisters Registers { get; } = registers;
+
+        public DebugResult<byte> ReadByte(ushort address)
+        {
+            var bytes = session.ReadBytes(address, 1);
+            return bytes.IsSuccess
+                ? DebugResult<byte>.Success(bytes.Value[0])
+                : DebugResult<byte>.Failure(bytes.Error!.Code, bytes.Error.Message);
+        }
     }
 
     private DebugResult<bool> StepOnce()

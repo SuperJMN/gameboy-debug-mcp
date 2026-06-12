@@ -7,9 +7,17 @@ public sealed class BreakpointCollection
 
     public IReadOnlyCollection<BreakpointInfo> All => byId.Values.ToArray();
 
-    public BreakpointInfo Set(ushort address, string? condition)
+    public BreakpointInfo Set(ushort address, string? condition, BreakpointCondition? parsedCondition = null)
     {
-        var info = new BreakpointInfo($"bp-{nextId++}", Hex.FormatWord(address), address, condition, true);
+        if (parsedCondition is null)
+        {
+            _ = BreakpointCondition.TryParse(condition, out parsedCondition, out _);
+        }
+
+        var info = new BreakpointInfo($"bp-{nextId++}", Hex.FormatWord(address), address, condition, true)
+        {
+            ParsedCondition = parsedCondition,
+        };
         byId.Add(info.Id, info);
         return info;
     }
@@ -23,5 +31,10 @@ public sealed class BreakpointCollection
     public BreakpointInfo? Find(ushort address)
     {
         return byId.Values.FirstOrDefault(breakpoint => breakpoint.Enabled && breakpoint.AddressValue == address);
+    }
+
+    public IReadOnlyCollection<BreakpointInfo> FindAll(ushort address)
+    {
+        return byId.Values.Where(breakpoint => breakpoint.Enabled && breakpoint.AddressValue == address).ToArray();
     }
 }

@@ -25,6 +25,21 @@ public sealed class BreakpointCollectionTests
         Assert.False(breakpoints.Contains(0x0150));
         Assert.True(breakpoints.Contains(0xC000));
         Assert.Equal("bp-2", second.Id);
+        Assert.NotNull(second.ParsedCondition);
+    }
+
+    [Fact]
+    public void Finds_all_enabled_breakpoints_at_an_address()
+    {
+        var breakpoints = new BreakpointCollection();
+
+        var first = breakpoints.Set(0x0150, "A == 1");
+        var second = breakpoints.Set(0x0150, "A == 2");
+        _ = breakpoints.Set(0xC000, null);
+
+        var matches = breakpoints.FindAll(0x0150);
+
+        Assert.Equal([first, second], matches);
     }
 
     [Fact]

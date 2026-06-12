@@ -6,6 +6,17 @@ namespace GameBoy.Debug.Tests;
 public sealed class SameBoyDebugSessionIntegrationTests
 {
     [Fact]
+    public void Set_breakpoint_rejects_invalid_condition_before_native_execution()
+    {
+        using var session = new SameBoyDebugSession();
+
+        var result = session.SetBreakpoint(0x0150, "A = 1");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("invalid_breakpoint_condition", result.Error?.Code);
+    }
+
+    [Fact]
     public void SameBoy_backend_loads_and_controls_minimal_rom()
     {
         if (!NativeBridgeExists())
