@@ -27,6 +27,14 @@ public sealed class SameBoyDebugSessionIntegrationTests
             Assert.True(loaded.Value.Loaded);
             Assert.Equal("DMG", loaded.Value.Model);
 
+            var loadedState = session.GetState();
+            Assert.True(loadedState.IsSuccess, loadedState.Error?.Message);
+            Assert.True(loadedState.Value.RomLoaded);
+            Assert.Equal("MCPTEST", loadedState.Value.Title);
+            Assert.Equal("DMG", loadedState.Value.Model);
+            Assert.Equal("0x0100", loadedState.Value.Pc);
+            Assert.False(loadedState.Value.Halted);
+
             var reset = session.Reset();
             Assert.True(reset.IsSuccess, reset.Error?.Message);
             Assert.True(reset.Value.Reset);
@@ -50,6 +58,13 @@ public sealed class SameBoyDebugSessionIntegrationTests
 
             var breakpoint = session.SetBreakpoint(0x0102, null);
             Assert.True(breakpoint.IsSuccess, breakpoint.Error?.Message);
+            var listedBreakpoints = session.ListBreakpoints();
+            Assert.True(listedBreakpoints.IsSuccess, listedBreakpoints.Error?.Message);
+            var listedBreakpoint = Assert.Single(listedBreakpoints.Value.Breakpoints);
+            Assert.Equal(breakpoint.Value.BreakpointId, listedBreakpoint.Id);
+            Assert.Equal("0x0102", listedBreakpoint.Address);
+            Assert.True(listedBreakpoint.Enabled);
+            Assert.Null(listedBreakpoint.Condition);
             var continued = session.ContinueUntilBreak(16);
             Assert.True(continued.IsSuccess, continued.Error?.Message);
             Assert.Equal("breakpoint", continued.Value.Reason);
@@ -99,6 +114,21 @@ public sealed class SameBoyDebugSessionIntegrationTests
             File.Delete(romPath);
             File.Delete(symPath);
         }
+    }
+
+    [Fact]
+    public void State_reports_no_rom_without_native_dependency()
+    {
+        using var session = new SameBoyDebugSession();
+
+        var state = session.GetState();
+
+        Assert.True(state.IsSuccess, state.Error?.Message);
+        Assert.False(state.Value.RomLoaded);
+        Assert.Null(state.Value.Title);
+        Assert.Null(state.Value.Model);
+        Assert.False(state.Value.Halted);
+        Assert.Null(state.Value.Pc);
     }
 
     [Fact]
@@ -172,6 +202,12 @@ public sealed class SameBoyDebugSessionIntegrationTests
 
     private static bool NativeBridgeExists()
     {
+        var nativeDir = Environment.GetEnvironmentVariable("GAMEBOY_DEBUG_MCP_NATIVE_DIR");
+        if (!string.IsNullOrWhiteSpace(nativeDir) && File.Exists(Path.Combine(nativeDir, "libgameboy_debug_sameboy.so")))
+        {
+            return true;
+        }
+
         var root = FindRepoRoot();
         return root is not null && File.Exists(Path.Combine(root, "native", "out", "linux-x64", "libgameboy_debug_sameboy.so"));
     }

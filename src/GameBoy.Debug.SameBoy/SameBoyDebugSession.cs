@@ -26,6 +26,9 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
     private readonly string artifactDirectory;
     private IntPtr handle;
     private bool disposed;
+    private bool romLoaded;
+    private string? romTitle;
+    private string? romModel;
 
     public SameBoyDebugSession()
     {
@@ -55,7 +58,10 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
         }
 
         breakpoints.ClearAll();
-        return DebugResult<LoadRomResult>.Success(new LoadRomResult(true, title.ToString(), model.ToString()));
+        romLoaded = true;
+        romTitle = title.ToString();
+        romModel = model.ToString();
+        return DebugResult<LoadRomResult>.Success(new LoadRomResult(true, romTitle, romModel));
     }
 
     public DebugResult<ResetResult> Reset()
@@ -223,6 +229,29 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
         return breakpoints.Clear(breakpointId)
             ? DebugResult<ClearBreakpointResult>.Success(new ClearBreakpointResult(true))
             : DebugResult<ClearBreakpointResult>.Failure("breakpoint_not_found", $"Breakpoint '{breakpointId}' was not found.");
+    }
+
+    public DebugResult<ListBreakpointsResult> ListBreakpoints()
+    {
+        var entries = breakpoints.All
+            .Select(breakpoint => new BreakpointEntry(breakpoint.Id, breakpoint.Address, breakpoint.Enabled, breakpoint.Condition))
+            .ToArray();
+
+        return DebugResult<ListBreakpointsResult>.Success(new ListBreakpointsResult(entries));
+    }
+
+    public DebugResult<SessionStateResult> GetState()
+    {
+        if (!romLoaded)
+        {
+            return DebugResult<SessionStateResult>.Success(new SessionStateResult(false, null, null, false, null));
+        }
+
+        var registers = ReadRegisters();
+        return registers.IsSuccess
+            ? DebugResult<SessionStateResult>.Success(
+                new SessionStateResult(true, romTitle, romModel, registers.Value.Halted, registers.Value.Pc))
+            : DebugResult<SessionStateResult>.Failure(registers.Error!.Code, registers.Error.Message);
     }
 
     public DebugResult<CpuRegisters> ReadRegisters()
@@ -482,6 +511,10 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
             SameBoyNative.Destroy(handle);
             handle = IntPtr.Zero;
         }
+
+        romLoaded = false;
+        romTitle = null;
+        romModel = null;
 
         disposed = true;
     }

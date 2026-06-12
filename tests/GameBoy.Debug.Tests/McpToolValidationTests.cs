@@ -98,6 +98,47 @@ public sealed class McpToolValidationTests
         Assert.Equal(5, payload.FramesRun);
     }
 
+    [Fact]
+    public void List_breakpoints_returns_session_payload()
+    {
+        var session = new FakeDebugSession
+        {
+            ListBreakpointsResult = DebugResult<ListBreakpointsResult>.Success(
+                new ListBreakpointsResult(
+                [
+                    new BreakpointEntry("bp-1", "0x0150", true, null),
+                    new BreakpointEntry("bp-2", "0xC000", true, "a == 1"),
+                ])),
+        };
+
+        var result = GameBoyDebugTools.ListBreakpoints(session);
+
+        var payload = Assert.IsType<ListBreakpointsResult>(result);
+        Assert.True(session.ListBreakpointsCalled);
+        Assert.Equal(2, payload.Breakpoints.Count);
+        Assert.Equal("bp-2", payload.Breakpoints[1].Id);
+        Assert.Equal("a == 1", payload.Breakpoints[1].Condition);
+    }
+
+    [Fact]
+    public void Get_state_returns_session_payload()
+    {
+        var session = new FakeDebugSession
+        {
+            GetStateResult = DebugResult<SessionStateResult>.Success(
+                new SessionStateResult(true, "MCPTEST", "DMG", false, "0x0100")),
+        };
+
+        var result = GameBoyDebugTools.GetState(session);
+
+        var payload = Assert.IsType<SessionStateResult>(result);
+        Assert.True(session.GetStateCalled);
+        Assert.True(payload.RomLoaded);
+        Assert.Equal("MCPTEST", payload.Title);
+        Assert.Equal("DMG", payload.Model);
+        Assert.Equal("0x0100", payload.Pc);
+    }
+
     private sealed class FakeDebugSession : IGameBoyDebugSession
     {
         public bool ReadMemoryCalled { get; private set; }
@@ -116,6 +157,10 @@ public sealed class McpToolValidationTests
 
         public int LastPressFrameCount { get; private set; }
 
+        public bool ListBreakpointsCalled { get; private set; }
+
+        public bool GetStateCalled { get; private set; }
+
         public DebugResult<MemoryReadResult> ReadMemoryResult { get; init; } =
             DebugResult<MemoryReadResult>.Failure("not_configured", "The fake session was not configured.");
 
@@ -124,6 +169,12 @@ public sealed class McpToolValidationTests
 
         public DebugResult<PressButtonsResult> PressButtonsResult { get; init; } =
             DebugResult<PressButtonsResult>.Failure("not_configured", "The fake session was not configured.");
+
+        public DebugResult<ListBreakpointsResult> ListBreakpointsResult { get; init; } =
+            DebugResult<ListBreakpointsResult>.Failure("not_configured", "The fake session was not configured.");
+
+        public DebugResult<SessionStateResult> GetStateResult { get; init; } =
+            DebugResult<SessionStateResult>.Failure("not_configured", "The fake session was not configured.");
 
         public DebugResult<LoadRomResult> LoadRom(string path) => throw new NotSupportedException();
 
@@ -153,6 +204,18 @@ public sealed class McpToolValidationTests
         public DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition) => throw new NotSupportedException();
 
         public DebugResult<ClearBreakpointResult> ClearBreakpoint(string breakpointId) => throw new NotSupportedException();
+
+        public DebugResult<ListBreakpointsResult> ListBreakpoints()
+        {
+            ListBreakpointsCalled = true;
+            return ListBreakpointsResult;
+        }
+
+        public DebugResult<SessionStateResult> GetState()
+        {
+            GetStateCalled = true;
+            return GetStateResult;
+        }
 
         public DebugResult<CpuRegisters> ReadRegisters() => throw new NotSupportedException();
 

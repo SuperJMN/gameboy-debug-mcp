@@ -20,6 +20,10 @@ public interface IGameBoyDebugSession
 
     DebugResult<ClearBreakpointResult> ClearBreakpoint(string breakpointId);
 
+    DebugResult<ListBreakpointsResult> ListBreakpoints();
+
+    DebugResult<SessionStateResult> GetState();
+
     DebugResult<CpuRegisters> ReadRegisters();
 
     DebugResult<MemoryReadResult> ReadMemory(ushort address, int length);

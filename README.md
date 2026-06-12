@@ -91,6 +91,8 @@ Implemented tools:
 - `continue_until_break`
 - `set_breakpoint`
 - `clear_breakpoint`
+- `list_breakpoints`
+- `get_state`
 - `read_registers`
 - `read_memory`
 - `write_memory`
