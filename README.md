@@ -1,8 +1,27 @@
-# gameboy-debug-mcp
+# GameBoy.Mcp
 
-`gameboy-debug-mcp` is a .NET MCP server for inspecting and controlling a Game Boy or Game Boy Color ROM running on the SameBoy core.
+`GameBoy.Mcp` is a .NET MCP server for inspecting and controlling a Game Boy or Game Boy Color ROM running on the SameBoy core. It is distributed as a .NET tool (command: `gameboymcp`).
 
 The current backend uses a thin native bridge over SameBoy's C core API. It does not implement an emulator.
+
+## Install
+
+The server ships as a .NET tool on NuGet with the Linux x64 native bridge bundled.
+
+Run it on demand with .NET 10's `dnx` (no install required):
+
+```bash
+dnx GameBoy.Mcp
+```
+
+Or install it globally:
+
+```bash
+dotnet tool install -g GameBoy.Mcp
+gameboymcp
+```
+
+> The published package bundles the `linux-x64` SameBoy native bridge. Other platforms must build the native libraries from source (see [Build](#build)).
 
 ## Build
 
@@ -52,20 +71,41 @@ GAMEBOY_DEBUG_MCP_NATIVE_DIR=/path/to/native dotnet run --project src/GameBoy.De
 
 ## Connect An MCP Client
 
-Use stdio transport. A typical client entry is:
+Use stdio transport. With the tool installed (or via `dnx`), the client entry is path-independent:
 
 ```json
 {
   "mcpServers": {
-    "gameboy-debug": {
+    "gameboy": {
+      "command": "dnx",
+      "args": ["GameBoy.Mcp", "--yes"]
+    }
+  }
+}
+```
+
+If you installed the tool globally (`dotnet tool install -g GameBoy.Mcp`), use the command directly:
+
+```json
+{
+  "mcpServers": {
+    "gameboy": {
+      "command": "gameboymcp"
+    }
+  }
+}
+```
+
+For development against a local checkout you can still run it from source:
+
+```json
+{
+  "mcpServers": {
+    "gameboy": {
       "command": "dotnet",
-      "args": [
-        "run",
-        "--project",
-        "/home/jmn/Repos/GameboyMcp/src/GameBoy.Debug.Mcp/GameBoy.Debug.Mcp.csproj"
-      ],
+      "args": ["run", "--project", "src/GameBoy.Debug.Mcp/GameBoy.Debug.Mcp.csproj"],
       "env": {
-        "GAMEBOY_DEBUG_MCP_NATIVE_DIR": "/home/jmn/Repos/GameboyMcp/native/out/linux-x64"
+        "GAMEBOY_DEBUG_MCP_NATIVE_DIR": "native/out/linux-x64"
       }
     }
   }
@@ -128,3 +168,16 @@ dotnet test gameboy-debug-mcp.slnx
 ```
 
 If `native/out/linux-x64/libgameboy_debug_sameboy.so` exists, the test suite also runs a SameBoy integration test against a generated minimal ROM.
+
+## Deployment
+
+Distribution is handled by [DotnetDeployer](https://github.com/SuperJMN/DotnetDeployer), configured in [`deployer.yaml`](deployer.yaml). It packs the `GameBoy.Mcp` tool (the native Linux x64 bridge is built on demand and bundled into the package) and pushes it to NuGet.
+
+Publish locally (requires the `NUGET_API_KEY` environment variable):
+
+```bash
+dnx dotnetdeployer.tool            # add --dry-run to pack without publishing
+```
+
+CI/CD is provided by [DotnetDeployer.Fleet](https://github.com/SuperJMN/DotnetDeployer.Fleet): a coordinator/worker that clones the repo and runs DotnetDeployer on every commit. The worker that builds the package must be `linux-x64` with `git`, `make` and `cc`/`clang` available so the native bridge can be compiled.
+
