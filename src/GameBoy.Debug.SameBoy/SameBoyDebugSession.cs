@@ -23,18 +23,11 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
     ];
     private readonly BreakpointCollection breakpoints = new();
     private readonly SymbolService symbols = new();
-    private readonly string artifactDirectory;
     private IntPtr handle;
     private bool disposed;
     private bool romLoaded;
     private string? romTitle;
     private string? romModel;
-
-    public SameBoyDebugSession()
-    {
-        artifactDirectory = Environment.GetEnvironmentVariable("GAMEBOY_DEBUG_MCP_ARTIFACT_DIR")
-            ?? Path.Combine(Directory.GetCurrentDirectory(), "artifacts");
-    }
 
     public DebugResult<LoadRomResult> LoadRom(string path)
     {
@@ -389,10 +382,8 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
             return NativeFailure<ScreenCaptureResult>("capture_screen_failed");
         }
 
-        Directory.CreateDirectory(artifactDirectory);
-        var path = Path.Combine(artifactDirectory, $"screen-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss-fff}.bmp");
-        WriteBmp(path, pixels);
-        return DebugResult<ScreenCaptureResult>.Success(new ScreenCaptureResult(ScreenWidth, ScreenHeight, path));
+        var data = PngEncoder.EncodeRgb24(pixels, ScreenWidth, ScreenHeight);
+        return DebugResult<ScreenCaptureResult>.Success(new ScreenCaptureResult(ScreenWidth, ScreenHeight, "image/png", data));
     }
 
     public DebugResult<LastWriterResult> FindLastWriter(ushort address)
@@ -737,48 +728,6 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
     {
         var normalized = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? text[2..] : text;
         return ushort.Parse(normalized, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
-    }
-
-    private static void WriteBmp(string path, IReadOnlyList<uint> pixels)
-    {
-        const int bytesPerPixel = 3;
-        var rowStride = ((ScreenWidth * bytesPerPixel + 3) / 4) * 4;
-        var imageSize = rowStride * ScreenHeight;
-        var fileSize = 14 + 40 + imageSize;
-
-        using var stream = File.Create(path);
-        using var writer = new BinaryWriter(stream, Encoding.ASCII, leaveOpen: false);
-        writer.Write((byte)'B');
-        writer.Write((byte)'M');
-        writer.Write(fileSize);
-        writer.Write((ushort)0);
-        writer.Write((ushort)0);
-        writer.Write(14 + 40);
-        writer.Write(40);
-        writer.Write(ScreenWidth);
-        writer.Write(ScreenHeight);
-        writer.Write((ushort)1);
-        writer.Write((ushort)24);
-        writer.Write(0);
-        writer.Write(imageSize);
-        writer.Write(2835);
-        writer.Write(2835);
-        writer.Write(0);
-        writer.Write(0);
-
-        var padding = new byte[rowStride - ScreenWidth * bytesPerPixel];
-        for (var y = ScreenHeight - 1; y >= 0; y--)
-        {
-            for (var x = 0; x < ScreenWidth; x++)
-            {
-                var pixel = pixels[y * ScreenWidth + x];
-                writer.Write((byte)(pixel & 0xFF));
-                writer.Write((byte)((pixel >> 8) & 0xFF));
-                writer.Write((byte)((pixel >> 16) & 0xFF));
-            }
-
-            writer.Write(padding);
-        }
     }
 
     private static readonly byte[] InstructionLengths =

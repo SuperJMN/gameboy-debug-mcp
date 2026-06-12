@@ -368,10 +368,14 @@ Input:
 {}
 ```
 
-Output:
+Output content:
 
 ```json
-{ "width": 160, "height": 144, "imagePath": "artifacts/screen-20260610-000000-000.bmp" }
+{
+  "type": "image",
+  "data": "<base64 PNG bytes>",
+  "mimeType": "image/png"
+}
 ```
 
 ## find_last_writer

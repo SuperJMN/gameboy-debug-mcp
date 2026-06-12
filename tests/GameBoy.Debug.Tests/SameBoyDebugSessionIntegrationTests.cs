@@ -105,9 +105,10 @@ public sealed class SameBoyDebugSessionIntegrationTests
 
             var screen = session.CaptureScreen();
             Assert.True(screen.IsSuccess, screen.Error?.Message);
-            Assert.True(File.Exists(screen.Value.ImagePath));
             Assert.Equal(160, screen.Value.Width);
             Assert.Equal(144, screen.Value.Height);
+            Assert.Equal("image/png", screen.Value.MimeType);
+            Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G'], screen.Value.Data[..4]);
         }
         finally
         {

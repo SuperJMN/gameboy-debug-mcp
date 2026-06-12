@@ -142,7 +142,8 @@ public sealed record OamSprite(
 public sealed record ScreenCaptureResult(
     [property: JsonPropertyName("width")] int Width,
     [property: JsonPropertyName("height")] int Height,
-    [property: JsonPropertyName("imagePath")] string ImagePath);
+    [property: JsonPropertyName("mimeType")] string MimeType,
+    [property: JsonPropertyName("data")] byte[] Data);
 
 public sealed record LastWriterResult(
     [property: JsonPropertyName("found")] bool Found,

@@ -55,7 +55,7 @@ Writes use `GB_write_memory`.
 
 The core does not allocate a framebuffer by default. The bridge owns a 160x144 `uint32_t` buffer, registers it with `GB_set_pixels_output`, and provides a simple RGB encoder via `GB_set_rgb_encode_callback`.
 
-The C# session copies that buffer and writes a 24-bit BMP artifact.
+The C# session copies that buffer and encodes it as an inline 8-bit RGB PNG for the MCP `capture_screen` tool.
 
 ## 7. What Build System Changes Are Needed?
 

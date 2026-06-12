@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using GameBoy.Debug.Core;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 namespace GameBoy.Debug.Mcp;
@@ -238,8 +239,14 @@ public static class GameBoyDebugTools
     public static object ReadPpuState(IGameBoyDebugSession session) => ToToolResult(session.ReadPpuState());
 
     [McpServerTool(Name = "capture_screen", ReadOnly = true, Destructive = false)]
-    [Description("Captures the current 160x144 screen image to an artifact file.")]
-    public static object CaptureScreen(IGameBoyDebugSession session) => ToToolResult(session.CaptureScreen());
+    [Description("Captures the current 160x144 screen image as inline PNG image content.")]
+    public static object CaptureScreen(IGameBoyDebugSession session)
+    {
+        var result = session.CaptureScreen();
+        return result.IsSuccess
+            ? ImageContentBlock.FromBytes(result.Value.Data, result.Value.MimeType)
+            : new ToolError(result.Error!);
+    }
 
     [McpServerTool(Name = "find_last_writer", ReadOnly = true, Destructive = false)]
     [Description("Returns the last observed write to an address since the session started or tracing began.")]
