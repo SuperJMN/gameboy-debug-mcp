@@ -8,7 +8,7 @@ public sealed class SymbolServiceTests
     [Fact]
     public void Loads_rgbds_style_symbols()
     {
-        var path = Path.GetTempFileName();
+        var path = CreateTestFilePath("symbols", ".sym");
         File.WriteAllLines(path,
         [
             "; comment",
@@ -49,5 +49,19 @@ public sealed class SymbolServiceTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal("symbol_not_found", result.Error?.Code);
+    }
+
+    private static string CreateTestFilePath(string prefix, string extension)
+    {
+        var directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "gameboy-debug-mcp.slnx")))
+        {
+            directory = directory.Parent;
+        }
+
+        var root = directory?.FullName ?? Directory.GetCurrentDirectory();
+        var testDirectory = Path.Combine(root, "artifacts", "tests");
+        Directory.CreateDirectory(testDirectory);
+        return Path.Combine(testDirectory, $"{prefix}-{Guid.NewGuid():N}{extension}");
     }
 }

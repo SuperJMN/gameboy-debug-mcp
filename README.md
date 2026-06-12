@@ -77,6 +77,8 @@ Use stdio transport. A typical client entry is:
 Implemented tools:
 
 - `load_rom`
+- `save_state`
+- `load_state`
 - `reset`
 - `step_instruction`
 - `run_frame`
@@ -115,7 +117,7 @@ See [docs/mcp-tools.md](docs/mcp-tools.md) for schemas and examples.
 
 ## SameBoy Approach
 
-SameBoy exposes the core operations this server needs through its C API: ROM loading, reset, stepping via `GB_run`, frame execution, joypad input, registers, memory, direct OAM access, disassembly logging, and framebuffer output. The bridge in `native/sameboy_mcp_bridge.c` converts those APIs into stable P/Invoke-friendly functions.
+SameBoy exposes the core operations this server needs through its C API: ROM loading, savestates, reset, stepping via `GB_run`, frame execution, joypad input, registers, memory, direct OAM access, disassembly logging, and framebuffer output. The bridge in `native/sameboy_mcp_bridge.c` converts those APIs into stable P/Invoke-friendly functions.
 
 See [docs/sameboy-integration.md](docs/sameboy-integration.md) for the research note.
 

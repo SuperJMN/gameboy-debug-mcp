@@ -4,6 +4,10 @@ public interface IGameBoyDebugSession
 {
     DebugResult<LoadRomResult> LoadRom(string path);
 
+    DebugResult<SaveStateResult> SaveState(string path);
+
+    DebugResult<LoadStateResult> LoadState(string path);
+
     DebugResult<ResetResult> Reset();
 
     DebugResult<StepInstructionResult> StepInstruction(int count);
