@@ -126,6 +126,14 @@ public static class GameBoyDebugTools
         return ToToolResult(session.ClearBreakpoint(breakpointId));
     }
 
+    [McpServerTool(Name = "list_breakpoints", ReadOnly = true, Destructive = false)]
+    [Description("Lists all breakpoints currently registered in the active session.")]
+    public static object ListBreakpoints(IGameBoyDebugSession session) => ToToolResult(session.ListBreakpoints());
+
+    [McpServerTool(Name = "get_state", ReadOnly = true, Destructive = false)]
+    [Description("Returns ROM load status, ROM metadata, halt status, and current PC when available.")]
+    public static object GetState(IGameBoyDebugSession session) => ToToolResult(session.GetState());
+
     [McpServerTool(Name = "read_registers", ReadOnly = true, Destructive = false)]
     [Description("Reads CPU registers from the active session.")]
     public static object ReadRegisters(IGameBoyDebugSession session) => ToToolResult(session.ReadRegisters());

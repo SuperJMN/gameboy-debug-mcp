@@ -61,6 +61,22 @@ public sealed record BreakpointSetResult(
 
 public sealed record ClearBreakpointResult([property: JsonPropertyName("cleared")] bool Cleared);
 
+public sealed record ListBreakpointsResult(
+    [property: JsonPropertyName("breakpoints")] IReadOnlyList<BreakpointEntry> Breakpoints);
+
+public sealed record BreakpointEntry(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("address")] string Address,
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("condition")] string? Condition);
+
+public sealed record SessionStateResult(
+    [property: JsonPropertyName("romLoaded")] bool RomLoaded,
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("model")] string? Model,
+    [property: JsonPropertyName("halted")] bool Halted,
+    [property: JsonPropertyName("pc")] string? Pc);
+
 public sealed record CpuRegisters(
     [property: JsonPropertyName("af")] string Af,
     [property: JsonPropertyName("bc")] string Bc,

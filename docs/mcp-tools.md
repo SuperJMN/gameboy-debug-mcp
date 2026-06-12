@@ -151,6 +151,45 @@ Output:
 { "cleared": true }
 ```
 
+## list_breakpoints
+
+Input:
+
+```json
+{}
+```
+
+Output:
+
+```json
+{
+  "breakpoints": [
+    { "id": "bp-1", "address": "0x0150", "enabled": true, "condition": null },
+    { "id": "bp-2", "address": "0xC000", "enabled": true, "condition": "a == 1" }
+  ]
+}
+```
+
+## get_state
+
+Input:
+
+```json
+{}
+```
+
+Output with a ROM loaded:
+
+```json
+{ "romLoaded": true, "title": "GAME", "model": "DMG", "halted": false, "pc": "0x0100" }
+```
+
+Output before loading a ROM:
+
+```json
+{ "romLoaded": false, "title": null, "model": null, "halted": false, "pc": null }
+```
+
 ## read_registers
 
 Input:
