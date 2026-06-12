@@ -126,7 +126,7 @@ Reasons: `breakpoint`, `maxInstructions`, `halt`, `error`.
 Input:
 
 ```json
-{ "address": "0x1234", "condition": null }
+{ "address": "0x1234", "condition": "A == 0x10" }
 ```
 
 Output:
@@ -135,7 +135,20 @@ Output:
 { "breakpointId": "bp-1", "address": "0x1234", "enabled": true }
 ```
 
-Conditions are accepted for API compatibility but are not evaluated by the first SameBoy backend.
+`condition` is optional. A null or empty condition is an unconditional breakpoint. Conditional breakpoints are evaluated in the C# session loop when `PC` reaches the breakpoint address.
+
+Supported condition grammar is a single comparison:
+
+```text
+<left> <operator> <constant>
+```
+
+- Left operands: 8-bit registers `A B C D E F H L`, 16-bit registers `AF BC DE HL SP PC`, or 8-bit memory reads `[addr]` / `[reg]`.
+- Memory addresses can be decimal or `0x` hexadecimal constants; memory registers must be 16-bit registers.
+- Operators: `== != < <= > >=`.
+- Constants: decimal or `0x` hexadecimal values from `0` to `0xFFFF`.
+
+Examples: `A == 0x10`, `B != 5`, `HL >= 0xC000`, `[0xFF80] == 1`, `[HL] < 4`. Invalid conditions are rejected by `set_breakpoint`.
 
 ## clear_breakpoint
 

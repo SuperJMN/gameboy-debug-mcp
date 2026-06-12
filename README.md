@@ -108,7 +108,7 @@ See [docs/mcp-tools.md](docs/mcp-tools.md) for schemas and examples.
 
 - The native bridge has been validated on Linux x64.
 - The backend skips the external boot ROM and applies a standard post-boot register state. This is deterministic and practical for debugging, but it is not a boot-ROM-accurate startup trace.
-- Breakpoints are managed by the C# session loop by comparing `PC` before/after stepping. SameBoy's richer conditional breakpoint engine is not exposed yet.
+- Breakpoints are managed by the C# session loop. Conditional breakpoints support register and memory comparisons such as `A == 0x10`, `HL >= 0xC000`, and `[HL] < 4`; SameBoy's native conditional breakpoint engine is not exposed.
 - `.sym` parsing is intentionally simple: `BANK:ADDR Name` and `ADDR Name` lines with `;` or `#` comments.
 - `capture_screen` returns inline PNG image content.
 - Joypad control disables SameBoy's physical button-bounce emulation so MCP-driven tests are deterministic.

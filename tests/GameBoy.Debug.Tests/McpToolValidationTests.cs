@@ -160,6 +160,18 @@ public sealed class McpToolValidationTests
         Assert.Equal(pngBytes, image.DecodedData.ToArray());
     }
 
+    [Fact]
+    public void Set_breakpoint_rejects_invalid_condition_without_calling_session()
+    {
+        var session = new FakeDebugSession();
+
+        var result = GameBoyDebugTools.SetBreakpoint(session, "0x0150", "A = 1");
+
+        var error = Assert.IsType<ToolError>(result);
+        Assert.Equal("invalid_breakpoint_condition", error.Error.Code);
+        Assert.False(session.SetBreakpointCalled);
+    }
+
     private sealed class FakeDebugSession : IGameBoyDebugSession
     {
         public bool ReadMemoryCalled { get; private set; }
@@ -183,6 +195,8 @@ public sealed class McpToolValidationTests
         public bool GetStateCalled { get; private set; }
 
         public bool CaptureScreenCalled { get; private set; }
+
+        public bool SetBreakpointCalled { get; private set; }
 
         public DebugResult<MemoryReadResult> ReadMemoryResult { get; init; } =
             DebugResult<MemoryReadResult>.Failure("not_configured", "The fake session was not configured.");
@@ -227,7 +241,11 @@ public sealed class McpToolValidationTests
 
         public DebugResult<ContinueResult> ContinueUntilBreak(int maxInstructions) => throw new NotSupportedException();
 
-        public DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition) => throw new NotSupportedException();
+        public DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition)
+        {
+            SetBreakpointCalled = true;
+            return DebugResult<BreakpointSetResult>.Failure("not_configured", "The fake session was not configured.");
+        }
 
         public DebugResult<ClearBreakpointResult> ClearBreakpoint(string breakpointId) => throw new NotSupportedException();
 

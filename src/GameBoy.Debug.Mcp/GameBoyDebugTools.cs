@@ -110,9 +110,17 @@ public static class GameBoyDebugTools
     public static object SetBreakpoint(IGameBoyDebugSession session, string address, string? condition = null)
     {
         var parsed = ParseAddress(address);
-        return parsed.IsSuccess
-            ? ToToolResult(session.SetBreakpoint(parsed.Value.Address, condition))
-            : new ToolError(parsed.Error!);
+        if (!parsed.IsSuccess)
+        {
+            return new ToolError(parsed.Error!);
+        }
+
+        if (!BreakpointCondition.TryParse(condition, out _, out var conditionError))
+        {
+            return Error("invalid_breakpoint_condition", $"Invalid breakpoint condition: {conditionError}");
+        }
+
+        return ToToolResult(session.SetBreakpoint(parsed.Value.Address, condition));
     }
 
     [McpServerTool(Name = "clear_breakpoint", ReadOnly = false, Destructive = false)]
