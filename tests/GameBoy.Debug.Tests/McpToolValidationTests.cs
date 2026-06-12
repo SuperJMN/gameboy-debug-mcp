@@ -1,5 +1,6 @@
 using GameBoy.Debug.Core;
 using GameBoy.Debug.Mcp;
+using ModelContextProtocol.Protocol;
 
 namespace GameBoy.Debug.Tests;
 
@@ -139,6 +140,26 @@ public sealed class McpToolValidationTests
         Assert.Equal("0x0100", payload.Pc);
     }
 
+    [Fact]
+    public void Capture_screen_returns_inline_png_image_content()
+    {
+        var pngBytes = new byte[] { 0x89, (byte)'P', (byte)'N', (byte)'G' };
+        var session = new FakeDebugSession
+        {
+            CaptureScreenResult = DebugResult<ScreenCaptureResult>.Success(
+                new ScreenCaptureResult(160, 144, "image/png", pngBytes)),
+        };
+
+        var result = GameBoyDebugTools.CaptureScreen(session);
+
+        var image = Assert.IsType<ImageContentBlock>(result);
+        Assert.True(session.CaptureScreenCalled);
+        Assert.Equal("image", image.Type);
+        Assert.Equal("image/png", image.MimeType);
+        Assert.Equal(Convert.ToBase64String(pngBytes), System.Text.Encoding.UTF8.GetString(image.Data.Span));
+        Assert.Equal(pngBytes, image.DecodedData.ToArray());
+    }
+
     private sealed class FakeDebugSession : IGameBoyDebugSession
     {
         public bool ReadMemoryCalled { get; private set; }
@@ -161,6 +182,8 @@ public sealed class McpToolValidationTests
 
         public bool GetStateCalled { get; private set; }
 
+        public bool CaptureScreenCalled { get; private set; }
+
         public DebugResult<MemoryReadResult> ReadMemoryResult { get; init; } =
             DebugResult<MemoryReadResult>.Failure("not_configured", "The fake session was not configured.");
 
@@ -175,6 +198,9 @@ public sealed class McpToolValidationTests
 
         public DebugResult<SessionStateResult> GetStateResult { get; init; } =
             DebugResult<SessionStateResult>.Failure("not_configured", "The fake session was not configured.");
+
+        public DebugResult<ScreenCaptureResult> CaptureScreenResult { get; init; } =
+            DebugResult<ScreenCaptureResult>.Failure("not_configured", "The fake session was not configured.");
 
         public DebugResult<LoadRomResult> LoadRom(string path) => throw new NotSupportedException();
 
@@ -235,7 +261,11 @@ public sealed class McpToolValidationTests
 
         public DebugResult<PpuStateResult> ReadPpuState() => throw new NotSupportedException();
 
-        public DebugResult<ScreenCaptureResult> CaptureScreen() => throw new NotSupportedException();
+        public DebugResult<ScreenCaptureResult> CaptureScreen()
+        {
+            CaptureScreenCalled = true;
+            return CaptureScreenResult;
+        }
 
         public DebugResult<LastWriterResult> FindLastWriter(ushort address) => throw new NotSupportedException();
 
