@@ -127,9 +127,15 @@ See [docs/mcp-tools.md](docs/mcp-tools.md) for schemas and examples.
 
 ## Emulator Core
 
-The emulator is a pure-managed C# core: a trimmed, vendored copy of [CoreBoy](https://github.com/davidwhitney/CoreBoy) (MIT), a C# port of [coffee-gb](https://github.com/trekawek/coffee-gb) by Tomasz Rękawek. Only the emulation core is kept (CPU, MMU, PPU, timers, interrupts, sound, serial, cartridge mappers); UI/audio frontends and their dependencies are removed. See [`src/GameBoy.Debug.Emulator/THIRD-PARTY-NOTICES.md`](src/GameBoy.Debug.Emulator/THIRD-PARTY-NOTICES.md) for attribution and the list of modifications.
+The emulator is a pure-managed C# core: a trimmed, vendored copy of [CoreBoy](https://github.com/davidwhitney/CoreBoy) by David Whitney (MIT), itself a C# port of [coffee-gb](https://github.com/trekawek/coffee-gb) by Tomasz Rękawek (MIT). Only the emulation core is kept (CPU, MMU, PPU, timers, interrupts, sound, serial, cartridge mappers); UI/audio frontends and their dependencies are removed. See [`src/GameBoy.Debug.Emulator/THIRD-PARTY-NOTICES.md`](src/GameBoy.Debug.Emulator/THIRD-PARTY-NOTICES.md) for full attribution, license texts, and the list of modifications.
 
-A legacy, optional SameBoy native backend remains in the repository (`GameBoy.Debug.SameBoy`) but is not used by the published tool.
+A legacy, optional native backend (`GameBoy.Debug.SameBoy`) links against [SameBoy](https://github.com/LIJI32/SameBoy) by Lior Halphon (Expat/MIT). SameBoy is not vendored and is not part of the published tool; it is cloned and built from source only if a developer opts in.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE) © José Manuel Nieto (@SuperJMN).
+
+It includes third-party software under its own license. The vendored CoreBoy core (MIT) is distributed inside the `GameBoy.Mcp` package; its copyright notice and the notices for all third-party components are reproduced in [`THIRD-PARTY-NOTICES.md`](src/GameBoy.Debug.Emulator/THIRD-PARTY-NOTICES.md), which is also bundled in the published package. All third-party authors retain full ownership of their work.
 
 ## Test
 
