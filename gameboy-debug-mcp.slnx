@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/GameBoy.Debug.Emulator/GameBoy.Debug.Emulator.csproj" />
     <Project Path="src/GameBoy.Debug.Core/GameBoy.Debug.Core.csproj" />
     <Project Path="src/GameBoy.Debug.Mcp/GameBoy.Debug.Mcp.csproj" />
     <Project Path="src/GameBoy.Debug.SameBoy/GameBoy.Debug.SameBoy.csproj" />

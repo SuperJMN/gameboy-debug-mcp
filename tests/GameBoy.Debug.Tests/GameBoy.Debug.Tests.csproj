@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\GameBoy.Debug.Core\GameBoy.Debug.Core.csproj" />
     <ProjectReference Include="..\..\src\GameBoy.Debug.Symbols\GameBoy.Debug.Symbols.csproj" />
     <ProjectReference Include="..\..\src\GameBoy.Debug.SameBoy\GameBoy.Debug.SameBoy.csproj" />
+    <ProjectReference Include="..\..\src\GameBoy.Debug.Emulator\GameBoy.Debug.Emulator.csproj" />
     <ProjectReference Include="..\..\src\GameBoy.Debug.Mcp\GameBoy.Debug.Mcp.csproj" />
   </ItemGroup>
 

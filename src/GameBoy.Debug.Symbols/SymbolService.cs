@@ -34,6 +34,19 @@ public sealed class SymbolService
             : DebugResult<SymbolInfo>.Failure("symbol_not_found", $"Symbol '{name}' was not loaded.");
     }
 
+    public string? ResolveAddress(ushort address)
+    {
+        foreach (var symbol in symbols.Values)
+        {
+            if (symbol.Address == address)
+            {
+                return symbol.Name;
+            }
+        }
+
+        return null;
+    }
+
     private static bool TryParseLine(string line, out SymbolInfo symbol)
     {
         symbol = null!;
