@@ -1,5 +1,5 @@
 using GameBoy.Debug.Core;
-using GameBoy.Debug.SameBoy;
+using GameBoy.Debug.Emulator;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -11,7 +11,9 @@ builder.Logging.AddConsole(options =>
     options.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
-builder.Services.AddSingleton<IGameBoyDebugSession, SameBoyDebugSession>();
+builder.Services.AddSingleton<ManagedGameBoyDebugSession>();
+builder.Services.AddSingleton<IGameBoyDebugSession>(provider =>
+    new SynchronizedGameBoyDebugSession(provider.GetRequiredService<ManagedGameBoyDebugSession>()));
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()

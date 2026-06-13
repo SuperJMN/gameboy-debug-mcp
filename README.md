@@ -1,12 +1,10 @@
 # GameBoy.Mcp
 
-`GameBoy.Mcp` is a .NET MCP server for inspecting and controlling a Game Boy or Game Boy Color ROM running on the SameBoy core. It is distributed as a .NET tool (command: `gameboymcp`).
+`GameBoy.Mcp` is a cross-platform .NET MCP server for inspecting and controlling a Game Boy or Game Boy Color ROM. It is distributed as a .NET tool (command: `gameboymcp`).
 
-The current backend uses a thin native bridge over SameBoy's C core API. It does not implement an emulator.
+The emulator core is **pure managed C#** (a trimmed, vendored copy of the MIT-licensed [CoreBoy](https://github.com/davidwhitney/CoreBoy), itself a port of [coffee-gb](https://github.com/trekawek/coffee-gb)). There are **no native dependencies**, so a single package runs anywhere .NET 10 runs — Windows, macOS and Linux, on x64 and arm64.
 
 ## Install
-
-The server ships as a .NET tool on NuGet with the Linux x64 native bridge bundled.
 
 Run it on demand with .NET 10's `dnx` (no install required):
 
@@ -21,39 +19,19 @@ dotnet tool install -g GameBoy.Mcp
 gameboymcp
 ```
 
-> The published package bundles the `linux-x64` SameBoy native bridge. Other platforms must build the native libraries from source (see [Build](#build)).
-
 ## Build
 
-Requirements for the managed project:
+Requirements:
 
 - .NET 10 SDK
-- `git`, `make`, `cc` or `clang`
 
-Build the managed solution:
+Build the solution:
 
 ```bash
 dotnet build gameboy-debug-mcp.slnx
 ```
 
-Build SameBoy and the native bridge:
-
-```bash
-./scripts/build-native.sh
-```
-
-That creates:
-
-```text
-native/out/linux-x64/libsameboy.so
-native/out/linux-x64/libgameboy_debug_sameboy.so
-```
-
-You can also point at an existing SameBoy checkout:
-
-```bash
-SAMEBOY_DIR=/path/to/SameBoy ./scripts/build-native.sh
-```
+That's it — no native toolchain or build step is required.
 
 ## Run
 
@@ -63,11 +41,7 @@ From the repo root:
 dotnet run --project src/GameBoy.Debug.Mcp/GameBoy.Debug.Mcp.csproj
 ```
 
-If the native libraries are somewhere else:
-
-```bash
-GAMEBOY_DEBUG_MCP_NATIVE_DIR=/path/to/native dotnet run --project src/GameBoy.Debug.Mcp/GameBoy.Debug.Mcp.csproj
-```
+Screen captures are returned inline as PNG images over MCP; no files are written.
 
 ## Connect An MCP Client
 
@@ -103,10 +77,7 @@ For development against a local checkout you can still run it from source:
   "mcpServers": {
     "gameboy": {
       "command": "dotnet",
-      "args": ["run", "--project", "src/GameBoy.Debug.Mcp/GameBoy.Debug.Mcp.csproj"],
-      "env": {
-        "GAMEBOY_DEBUG_MCP_NATIVE_DIR": "native/out/linux-x64"
-      }
+      "args": ["run", "--project", "src/GameBoy.Debug.Mcp/GameBoy.Debug.Mcp.csproj"]
     }
   }
 }
@@ -148,18 +119,17 @@ See [docs/mcp-tools.md](docs/mcp-tools.md) for schemas and examples.
 
 ## Current Limitations
 
-- The native bridge has been validated on Linux x64.
-- The backend skips the external boot ROM and applies a standard post-boot register state. This is deterministic and practical for debugging, but it is not a boot-ROM-accurate startup trace.
-- Breakpoints are managed by the C# session loop. Conditional breakpoints support register and memory comparisons such as `A == 0x10`, `HL >= 0xC000`, and `[HL] < 4`; SameBoy's native conditional breakpoint engine is not exposed.
+- The managed core skips the external boot ROM and applies a standard post-boot register state. This is deterministic and practical for debugging, but it is not a boot-ROM-accurate startup trace.
+- Conditional breakpoints are evaluated by the C# session loop and support register and memory comparisons such as `A == 0x10`, `HL >= 0xC000`, and `[HL] < 4`.
 - `.sym` parsing is intentionally simple: `BANK:ADDR Name` and `ADDR Name` lines with `;` or `#` comments.
 - `capture_screen` returns inline PNG image content.
-- Joypad control disables SameBoy's physical button-bounce emulation so MCP-driven tests are deterministic.
+- Savestates capture CPU registers and all CPU-visible RAM/IO; MBC bank selection and sub-frame PPU/APU timing are not captured, so save/restore is intended at frame boundaries.
 
-## SameBoy Approach
+## Emulator Core
 
-SameBoy exposes the core operations this server needs through its C API: ROM loading, savestates, reset, stepping via `GB_run`, frame execution, joypad input, registers, memory, direct OAM access, disassembly logging, and framebuffer output. The bridge in `native/sameboy_mcp_bridge.c` converts those APIs into stable P/Invoke-friendly functions.
+The emulator is a pure-managed C# core: a trimmed, vendored copy of [CoreBoy](https://github.com/davidwhitney/CoreBoy) (MIT), a C# port of [coffee-gb](https://github.com/trekawek/coffee-gb) by Tomasz Rękawek. Only the emulation core is kept (CPU, MMU, PPU, timers, interrupts, sound, serial, cartridge mappers); UI/audio frontends and their dependencies are removed. See [`src/GameBoy.Debug.Emulator/THIRD-PARTY-NOTICES.md`](src/GameBoy.Debug.Emulator/THIRD-PARTY-NOTICES.md) for attribution and the list of modifications.
 
-See [docs/sameboy-integration.md](docs/sameboy-integration.md) for the research note.
+A legacy, optional SameBoy native backend remains in the repository (`GameBoy.Debug.SameBoy`) but is not used by the published tool.
 
 ## Test
 
@@ -167,11 +137,11 @@ See [docs/sameboy-integration.md](docs/sameboy-integration.md) for the research 
 dotnet test gameboy-debug-mcp.slnx
 ```
 
-If `native/out/linux-x64/libgameboy_debug_sameboy.so` exists, the test suite also runs a SameBoy integration test against a generated minimal ROM.
+The managed-core integration tests run on every platform with no native dependency. If the optional SameBoy native library (`native/out/linux-x64/libgameboy_debug_sameboy.so`) exists, the legacy SameBoy integration tests also run.
 
 ## Deployment
 
-Distribution is handled by [DotnetDeployer](https://github.com/SuperJMN/DotnetDeployer), configured in [`deployer.yaml`](deployer.yaml). It packs the `GameBoy.Mcp` tool (the native Linux x64 bridge is built on demand and bundled into the package) and pushes it to NuGet.
+Distribution is handled by [DotnetDeployer](https://github.com/SuperJMN/DotnetDeployer), configured in [`deployer.yaml`](deployer.yaml). It packs the `GameBoy.Mcp` tool and pushes it to NuGet. Because the emulator core is pure managed C#, the package is a single architecture-agnostic artifact that runs on every platform — no per-RID native builds.
 
 Publish locally (requires the `NUGET_API_KEY` environment variable):
 
@@ -179,5 +149,5 @@ Publish locally (requires the `NUGET_API_KEY` environment variable):
 dnx dotnetdeployer.tool            # add --dry-run to pack without publishing
 ```
 
-CI/CD is provided by [DotnetDeployer.Fleet](https://github.com/SuperJMN/DotnetDeployer.Fleet): a coordinator/worker that clones the repo and runs DotnetDeployer on every commit. The worker that builds the package must be `linux-x64` with `git`, `make` and `cc`/`clang` available so the native bridge can be compiled.
+CI/CD is provided by [DotnetDeployer.Fleet](https://github.com/SuperJMN/DotnetDeployer.Fleet): a coordinator/worker that clones the repo and runs DotnetDeployer on every commit. Any worker with the .NET 10 SDK can build and publish the package.
 
