@@ -91,6 +91,40 @@ Output:
 { "framesRun": 1, "registers": {}, "hitBreakpoint": false }
 ```
 
+`run_frame` may stop before the requested frame count when a watchpoint is hit. The result shape is unchanged; inspect the current registers after the call if execution stopped early.
+
+## step_over
+
+Input:
+
+```json
+{ "maxInstructions": 100000 }
+```
+
+Output:
+
+```json
+{ "stopped": true, "reason": "step_over", "pc": "0x0103", "registers": {} }
+```
+
+If the current instruction is a `CALL` or `RST`, this runs until execution returns to the instruction after it. Otherwise it steps a single instruction and returns reason `step`. Other reasons: `breakpoint`, `watchpoint`, `halt`, `maxInstructions`.
+
+## step_out
+
+Input:
+
+```json
+{ "maxInstructions": 100000 }
+```
+
+Output:
+
+```json
+{ "stopped": true, "reason": "step_out", "pc": "0x0103", "registers": {} }
+```
+
+Runs until the current stack frame returns. Other reasons: `breakpoint`, `watchpoint`, `halt`, `maxInstructions`.
+
 ## set_joypad
 
 Input:
@@ -147,7 +181,7 @@ Output:
 { "stopped": true, "reason": "breakpoint", "pc": "0x0150", "registers": {} }
 ```
 
-Reasons: `breakpoint`, `maxInstructions`, `halt`, `error`.
+Reasons: `breakpoint`, `watchpoint`, `maxInstructions`, `halt`, `error`.
 
 ## set_breakpoint
 
@@ -207,6 +241,55 @@ Output:
   "breakpoints": [
     { "id": "bp-1", "address": "0x0150", "enabled": true, "condition": null },
     { "id": "bp-2", "address": "0xC000", "enabled": true, "condition": "a == 1" }
+  ]
+}
+```
+
+## set_watchpoint
+
+Input:
+
+```json
+{ "address": "0xC000", "mode": "write" }
+```
+
+Output:
+
+```json
+{ "watchpointId": "wp-1", "address": "0xC000", "mode": "write", "enabled": true }
+```
+
+Modes are `read`, `write`, or `access`. Read watchpoints also trigger on instruction fetches when the watched address is executed.
+
+## clear_watchpoint
+
+Input:
+
+```json
+{ "watchpointId": "wp-1" }
+```
+
+Output:
+
+```json
+{ "cleared": true }
+```
+
+## list_watchpoints
+
+Input:
+
+```json
+{}
+```
+
+Output:
+
+```json
+{
+  "watchpoints": [
+    { "id": "wp-1", "address": "0xC000", "mode": "write", "enabled": true },
+    { "id": "wp-2", "address": "0xD000", "mode": "access", "enabled": true }
   ]
 }
 ```

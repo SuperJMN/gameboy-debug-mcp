@@ -20,11 +20,21 @@ public interface IGameBoyDebugSession
 
     DebugResult<ContinueResult> ContinueUntilBreak(int maxInstructions);
 
+    DebugResult<ContinueResult> StepOver(int maxInstructions);
+
+    DebugResult<ContinueResult> StepOut(int maxInstructions);
+
     DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition);
 
     DebugResult<ClearBreakpointResult> ClearBreakpoint(string breakpointId);
 
     DebugResult<ListBreakpointsResult> ListBreakpoints();
+
+    DebugResult<WatchpointSetResult> SetWatchpoint(ushort address, WatchpointMode mode);
+
+    DebugResult<ClearWatchpointResult> ClearWatchpoint(string watchpointId);
+
+    DebugResult<ListWatchpointsResult> ListWatchpoints();
 
     DebugResult<SessionStateResult> GetState();
 

@@ -1,6 +1,7 @@
 using GameBoy.Debug.Core;
 using GameBoy.Debug.Mcp;
 using ModelContextProtocol.Protocol;
+using System.Text.Json;
 
 namespace GameBoy.Debug.Tests;
 
@@ -228,6 +229,60 @@ public sealed class McpToolValidationTests
         Assert.Equal("state.s0", payload.Path);
     }
 
+    [Theory]
+    [InlineData("read", WatchpointMode.Read)]
+    [InlineData("ACCESS", WatchpointMode.Access)]
+    public void Set_watchpoint_accepts_supported_modes(string mode, WatchpointMode expectedMode)
+    {
+        var session = new FakeDebugSession
+        {
+            SetWatchpointResult = DebugResult<WatchpointSetResult>.Success(
+                new WatchpointSetResult("wp-1", "0xC000", mode.ToLowerInvariant(), true)),
+        };
+
+        var result = GameBoyDebugTools.SetWatchpoint(session, "0xC000", mode);
+
+        var payload = Assert.IsType<WatchpointSetResult>(result);
+        Assert.True(session.SetWatchpointCalled);
+        Assert.Equal((ushort)0xC000, session.LastWatchpointAddress);
+        Assert.Equal(expectedMode, session.LastWatchpointMode);
+        Assert.Equal(mode.ToLowerInvariant(), payload.Mode);
+    }
+
+    [Fact]
+    public void Set_watchpoint_rejects_invalid_mode_without_calling_session()
+    {
+        var session = new FakeDebugSession();
+
+        var result = GameBoyDebugTools.SetWatchpoint(session, "0xC000", "execute");
+
+        var error = Assert.IsType<ToolError>(result);
+        Assert.Equal("invalid_watchpoint_mode", error.Error.Code);
+        Assert.False(session.SetWatchpointCalled);
+    }
+
+    [Fact]
+    public void Watchpoint_result_serializes_mode_as_lowercase_string()
+    {
+        var result = new WatchpointSetResult("wp-1", "0xC000", "read", true);
+
+        var json = JsonSerializer.Serialize(result);
+
+        Assert.Contains("\"mode\":\"read\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Step_over_validates_instruction_limit_before_calling_session()
+    {
+        var session = new FakeDebugSession();
+
+        var result = GameBoyDebugTools.StepOver(session, 0);
+
+        var error = Assert.IsType<ToolError>(result);
+        Assert.Equal("invalid_max_instructions", error.Error.Code);
+        Assert.False(session.StepOverCalled);
+    }
+
     private sealed class FakeDebugSession : IGameBoyDebugSession
     {
         public bool ReadMemoryCalled { get; private set; }
@@ -262,6 +317,14 @@ public sealed class McpToolValidationTests
 
         public string? LastLoadStatePath { get; private set; }
 
+        public bool SetWatchpointCalled { get; private set; }
+
+        public ushort LastWatchpointAddress { get; private set; }
+
+        public WatchpointMode LastWatchpointMode { get; private set; }
+
+        public bool StepOverCalled { get; private set; }
+
         public DebugResult<MemoryReadResult> ReadMemoryResult { get; init; } =
             DebugResult<MemoryReadResult>.Failure("not_configured", "The fake session was not configured.");
 
@@ -285,6 +348,9 @@ public sealed class McpToolValidationTests
 
         public DebugResult<LoadStateResult> LoadStateResult { get; init; } =
             DebugResult<LoadStateResult>.Failure("not_configured", "The fake session was not configured.");
+
+        public DebugResult<WatchpointSetResult> SetWatchpointResult { get; init; } =
+            DebugResult<WatchpointSetResult>.Failure("not_configured", "The fake session was not configured.");
 
         public DebugResult<LoadRomResult> LoadRom(string path) => throw new NotSupportedException();
 
@@ -325,6 +391,14 @@ public sealed class McpToolValidationTests
 
         public DebugResult<ContinueResult> ContinueUntilBreak(int maxInstructions) => throw new NotSupportedException();
 
+        public DebugResult<ContinueResult> StepOver(int maxInstructions)
+        {
+            StepOverCalled = true;
+            throw new NotSupportedException();
+        }
+
+        public DebugResult<ContinueResult> StepOut(int maxInstructions) => throw new NotSupportedException();
+
         public DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition)
         {
             SetBreakpointCalled = true;
@@ -338,6 +412,18 @@ public sealed class McpToolValidationTests
             ListBreakpointsCalled = true;
             return ListBreakpointsResult;
         }
+
+        public DebugResult<WatchpointSetResult> SetWatchpoint(ushort address, WatchpointMode mode)
+        {
+            SetWatchpointCalled = true;
+            LastWatchpointAddress = address;
+            LastWatchpointMode = mode;
+            return SetWatchpointResult;
+        }
+
+        public DebugResult<ClearWatchpointResult> ClearWatchpoint(string watchpointId) => throw new NotSupportedException();
+
+        public DebugResult<ListWatchpointsResult> ListWatchpoints() => throw new NotSupportedException();
 
         public DebugResult<SessionStateResult> GetState()
         {

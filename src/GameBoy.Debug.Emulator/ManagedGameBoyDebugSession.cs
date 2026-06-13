@@ -56,6 +56,7 @@ namespace GameBoy.Debug.Emulator
         };
 
         private readonly BreakpointCollection breakpoints = new();
+        private readonly WatchpointCollection watchpoints = new();
         private readonly SymbolService symbols = new();
         private readonly Dictionary<int, WriteRecord> lastWriters = new();
 
@@ -67,6 +68,8 @@ namespace GameBoy.Debug.Emulator
         private string romModel;
         private bool romLoaded;
         private bool trackWrites;
+        private bool trackReads;
+        private WatchHit? watchHit;
         private bool disposed;
 
         public DebugResult<LoadRomResult> LoadRom(string path)
@@ -85,6 +88,7 @@ namespace GameBoy.Debug.Emulator
             {
                 BuildMachine(path);
                 breakpoints.ClearAll();
+                watchpoints.ClearAll();
                 return DebugResult<LoadRomResult>.Success(new LoadRomResult(true, romTitle, romModel));
             }
             catch (Exception ex)
@@ -102,9 +106,12 @@ namespace GameBoy.Debug.Emulator
             controller = new HeadlessController();
             gameboy = new Gameboy(options, cartridge, display, controller, new NullSoundOutput(), new NullSerialEndpoint());
             gameboy.Mmu.WriteObserver = OnMemoryWrite;
+            gameboy.Mmu.ReadObserver = null;
             lastMode = null;
             lastWriters.Clear();
             trackWrites = true;
+            trackReads = false;
+            watchHit = null;
             romPath = path;
             romTitle = cartridge.Title;
             romModel = cartridge.Gbc ? "CGB" : "DMG";
@@ -168,9 +175,28 @@ namespace GameBoy.Debug.Emulator
                 return NoRom<RunFrameResult>();
             }
 
-            for (var i = 0; i < count; i++)
+            watchHit = null;
+            var framesRun = 0;
+            AttachReadObserverIfNeeded();
+            try
             {
-                RunSingleFrame();
+                for (var i = 0; i < count; i++)
+                {
+                    var completed = RunSingleFrame();
+                    if (completed)
+                    {
+                        framesRun++;
+                    }
+
+                    if (watchHit.HasValue)
+                    {
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                DetachReadObserver();
             }
 
             var registers = ReadRegisters();
@@ -185,7 +211,7 @@ namespace GameBoy.Debug.Emulator
                 return DebugResult<RunFrameResult>.Failure(hit.Error!.Code, hit.Error.Message);
             }
 
-            return DebugResult<RunFrameResult>.Success(new RunFrameResult(count, registers.Value, hit.Value));
+            return DebugResult<RunFrameResult>.Success(new RunFrameResult(framesRun, registers.Value, hit.Value));
         }
 
         public DebugResult<JoypadStateResult> SetJoypad(IReadOnlyList<JoypadButton> pressedButtons)
@@ -235,52 +261,113 @@ namespace GameBoy.Debug.Emulator
                 return NoRom<ContinueResult>();
             }
 
-            for (var i = 0; i < maxInstructions; i++)
+            watchHit = null;
+            AttachReadObserverIfNeeded();
+            try
             {
-                var cpu = gameboy.Cpu;
-                var pc = (ushort)cpu.Registers.PC;
-
-                // Fast path: only materialize the full register set when we actually need it
-                // (a breakpoint sits at this PC, or we are about to stop). This avoids formatting
-                // ~16 hex strings on every single instruction.
-                if (breakpoints.HasBreakpointAt(pc))
+                for (var i = 0; i < maxInstructions; i++)
                 {
-                    var registers = ReadRegisters();
-                    if (!registers.IsSuccess)
+                    var cpu = gameboy.Cpu;
+                    var pc = (ushort)cpu.Registers.PC;
+
+                    // Fast path: only materialize the full register set when we actually need it
+                    // (a breakpoint sits at this PC, or we are about to stop). This avoids formatting
+                    // ~16 hex strings on every single instruction.
+                    if (breakpoints.HasBreakpointAt(pc))
                     {
-                        return DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
+                        var registers = ReadRegisters();
+                        if (!registers.IsSuccess)
+                        {
+                            return DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
+                        }
+
+                        var hit = IsBreakpointHit(pc, registers.Value);
+                        if (!hit.IsSuccess)
+                        {
+                            return DebugResult<ContinueResult>.Failure(hit.Error!.Code, hit.Error.Message);
+                        }
+
+                        if (hit.Value)
+                        {
+                            return Stop("breakpoint", registers.Value);
+                        }
                     }
 
-                    var hit = IsBreakpointHit(pc, registers.Value);
-                    if (!hit.IsSuccess)
+                    if (cpu.State == State.HALTED || cpu.State == State.STOPPED)
                     {
-                        return DebugResult<ContinueResult>.Failure(hit.Error!.Code, hit.Error.Message);
+                        var halted = ReadRegisters();
+                        return halted.IsSuccess
+                            ? Stop("halt", halted.Value)
+                            : DebugResult<ContinueResult>.Failure(halted.Error!.Code, halted.Error.Message);
                     }
 
-                    if (hit.Value)
+                    StepOnce();
+                    if (watchHit.HasValue)
                     {
-                        return Stop("breakpoint", registers.Value);
+                        var registers = ReadRegisters();
+                        return registers.IsSuccess
+                            ? Stop("watchpoint", registers.Value)
+                            : DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
                     }
                 }
 
-                if (cpu.State == State.HALTED || cpu.State == State.STOPPED)
-                {
-                    var halted = ReadRegisters();
-                    return halted.IsSuccess
-                        ? Stop("halt", halted.Value)
-                        : DebugResult<ContinueResult>.Failure(halted.Error!.Code, halted.Error.Message);
-                }
-
-                StepOnce();
+                var final = ReadRegisters();
+                return final.IsSuccess
+                    ? Stop("maxInstructions", final.Value)
+                    : DebugResult<ContinueResult>.Failure(final.Error!.Code, final.Error.Message);
             }
-
-            var final = ReadRegisters();
-            return final.IsSuccess
-                ? Stop("maxInstructions", final.Value)
-                : DebugResult<ContinueResult>.Failure(final.Error!.Code, final.Error.Message);
+            finally
+            {
+                DetachReadObserver();
+            }
 
             static DebugResult<ContinueResult> Stop(string reason, CpuRegisters registers) =>
                 DebugResult<ContinueResult>.Success(new ContinueResult(true, reason, registers.Pc, registers));
+        }
+
+        public DebugResult<ContinueResult> StepOver(int maxInstructions)
+        {
+            if (!romLoaded)
+            {
+                return NoRom<ContinueResult>();
+            }
+
+            var before = ReadRegisters();
+            if (!before.IsSuccess)
+            {
+                return DebugResult<ContinueResult>.Failure(before.Error!.Code, before.Error.Message);
+            }
+
+            var pc = ParseWord(before.Value.Pc);
+            var opcode = ReadByte(pc);
+            if (!IsCallOrRst(opcode, out var length))
+            {
+                return StepSingle("step");
+            }
+
+            var returnAddress = (ushort)(pc + length);
+            var startSp = ParseWord(before.Value.Sp);
+            return StepUntil(
+                maxInstructions,
+                registers => ParseWord(registers.Pc) == returnAddress && ParseWord(registers.Sp) >= startSp,
+                "step_over");
+        }
+
+        public DebugResult<ContinueResult> StepOut(int maxInstructions)
+        {
+            if (!romLoaded)
+            {
+                return NoRom<ContinueResult>();
+            }
+
+            var before = ReadRegisters();
+            if (!before.IsSuccess)
+            {
+                return DebugResult<ContinueResult>.Failure(before.Error!.Code, before.Error.Message);
+            }
+
+            var startSp = ParseWord(before.Value.Sp);
+            return StepUntil(maxInstructions, registers => ParseWord(registers.Sp) > startSp, "step_out");
         }
 
         public DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition)
@@ -310,6 +397,29 @@ namespace GameBoy.Debug.Emulator
                 .ToArray();
 
             return DebugResult<ListBreakpointsResult>.Success(new ListBreakpointsResult(entries));
+        }
+
+        public DebugResult<WatchpointSetResult> SetWatchpoint(ushort address, WatchpointMode mode)
+        {
+            var watchpoint = watchpoints.Set(address, mode);
+            return DebugResult<WatchpointSetResult>.Success(
+                new WatchpointSetResult(watchpoint.Id, watchpoint.Address, ToWatchpointModeName(watchpoint.Mode), watchpoint.Enabled));
+        }
+
+        public DebugResult<ClearWatchpointResult> ClearWatchpoint(string watchpointId)
+        {
+            return watchpoints.Clear(watchpointId)
+                ? DebugResult<ClearWatchpointResult>.Success(new ClearWatchpointResult(true))
+                : DebugResult<ClearWatchpointResult>.Failure("watchpoint_not_found", $"Watchpoint '{watchpointId}' was not found.");
+        }
+
+        public DebugResult<ListWatchpointsResult> ListWatchpoints()
+        {
+            var entries = watchpoints.All
+                .Select(watchpoint => new WatchpointEntry(watchpoint.Id, watchpoint.Address, ToWatchpointModeName(watchpoint.Mode), watchpoint.Enabled))
+                .ToArray();
+
+            return DebugResult<ListWatchpointsResult>.Success(new ListWatchpointsResult(entries));
         }
 
         public DebugResult<SessionStateResult> GetState()
@@ -722,59 +832,102 @@ namespace GameBoy.Debug.Emulator
                 traceHitPc = pc;
                 traceHitValue = byteValue;
             }
+
+            if (watchpoints.TryMatch((ushort)masked, isWrite: true, out var watchpoint))
+            {
+                watchHit = new WatchHit((ushort)masked, watchpoint.Mode, pc, byteValue);
+            }
+        }
+
+        private void OnMemoryRead(int address)
+        {
+            if (!trackReads)
+            {
+                return;
+            }
+
+            var masked = (ushort)(address & 0xFFFF);
+            if (watchpoints.TryMatch(masked, isWrite: false, out var watchpoint))
+            {
+                watchHit = new WatchHit(masked, watchpoint.Mode, (ushort)gameboy.Cpu.Registers.PC, null);
+            }
         }
 
         private void StepOnce()
         {
-            var cpu = gameboy.Cpu;
-            var guard = 0;
-
-            // When halted/stopped, advance (bounded) until an interrupt wakes the CPU.
-            if (cpu.State == State.HALTED || cpu.State == State.STOPPED)
+            var previousTrackReads = trackReads;
+            trackReads = gameboy.Mmu.ReadObserver != null;
+            try
             {
-                do
+                var cpu = gameboy.Cpu;
+                var guard = 0;
+
+                // When halted/stopped, advance (bounded) until an interrupt wakes the CPU.
+                if (cpu.State == State.HALTED || cpu.State == State.STOPPED)
+                {
+                    do
+                    {
+                        TickOnce();
+                        guard++;
+                    }
+                    while ((cpu.State == State.HALTED || cpu.State == State.STOPPED) && guard < MaxStepCycles);
+                    return;
+                }
+
+                // Cpu.Tick() is clock-divided (4 ticks per machine cycle). An instruction always leaves
+                // State.OPCODE during decode and returns to State.OPCODE once it retires. Tick until the
+                // opcode is consumed, then until the next fetch boundary.
+                var leftOpcode = false;
+                while (guard < MaxStepCycles)
                 {
                     TickOnce();
                     guard++;
-                }
-                while ((cpu.State == State.HALTED || cpu.State == State.STOPPED) && guard < MaxStepCycles);
-                return;
-            }
 
-            // Cpu.Tick() is clock-divided (4 ticks per machine cycle). An instruction always leaves
-            // State.OPCODE during decode and returns to State.OPCODE once it retires. Tick until the
-            // opcode is consumed, then until the next fetch boundary.
-            var leftOpcode = false;
-            while (guard < MaxStepCycles)
-            {
-                TickOnce();
-                guard++;
-
-                var state = cpu.State;
-                if (state == State.HALTED || state == State.STOPPED)
-                {
-                    return;
-                }
-
-                if (!leftOpcode)
-                {
-                    if (state != State.OPCODE)
+                    var state = cpu.State;
+                    if (state == State.HALTED || state == State.STOPPED)
                     {
-                        leftOpcode = true;
+                        return;
+                    }
+
+                    if (!leftOpcode)
+                    {
+                        if (state != State.OPCODE)
+                        {
+                            leftOpcode = true;
+                        }
+                    }
+                    else if (state == State.OPCODE)
+                    {
+                        return;
                     }
                 }
-                else if (state == State.OPCODE)
-                {
-                    return;
-                }
+            }
+            finally
+            {
+                trackReads = previousTrackReads;
             }
         }
 
-        private void RunSingleFrame()
+        private bool RunSingleFrame()
         {
-            for (var cycle = 0; cycle < CyclesPerFrame; cycle++)
+            var previousTrackReads = trackReads;
+            trackReads = gameboy.Mmu.ReadObserver != null;
+            try
             {
-                TickOnce();
+                for (var cycle = 0; cycle < CyclesPerFrame; cycle++)
+                {
+                    TickOnce();
+                    if (watchHit.HasValue)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            finally
+            {
+                trackReads = previousTrackReads;
             }
         }
 
@@ -835,6 +988,141 @@ namespace GameBoy.Debug.Emulator
 
             return breakpoint.ParsedCondition.Evaluate(new ConditionContext(this, registers));
         }
+
+        private DebugResult<ContinueResult> StepSingle(string reason)
+        {
+            watchHit = null;
+            AttachReadObserverIfNeeded();
+            try
+            {
+                StepOnce();
+                var registers = ReadRegisters();
+                if (!registers.IsSuccess)
+                {
+                    return DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
+                }
+
+                if (watchHit.HasValue)
+                {
+                    return Stop("watchpoint", registers.Value);
+                }
+
+                var breakpoint = IsBreakpointHit(ParseWord(registers.Value.Pc), registers.Value);
+                if (!breakpoint.IsSuccess)
+                {
+                    return DebugResult<ContinueResult>.Failure(breakpoint.Error!.Code, breakpoint.Error.Message);
+                }
+
+                if (breakpoint.Value)
+                {
+                    return Stop("breakpoint", registers.Value);
+                }
+
+                return registers.Value.Halted ? Stop("halt", registers.Value) : Stop(reason, registers.Value);
+            }
+            finally
+            {
+                DetachReadObserver();
+            }
+        }
+
+        private DebugResult<ContinueResult> StepUntil(int maxInstructions, Func<CpuRegisters, bool> completed, string completedReason)
+        {
+            watchHit = null;
+            AttachReadObserverIfNeeded();
+            try
+            {
+                for (var i = 0; i < maxInstructions; i++)
+                {
+                    if (gameboy.Cpu.State == State.HALTED || gameboy.Cpu.State == State.STOPPED)
+                    {
+                        var halted = ReadRegisters();
+                        return halted.IsSuccess
+                            ? Stop("halt", halted.Value)
+                            : DebugResult<ContinueResult>.Failure(halted.Error!.Code, halted.Error.Message);
+                    }
+
+                    StepOnce();
+                    var registers = ReadRegisters();
+                    if (!registers.IsSuccess)
+                    {
+                        return DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
+                    }
+
+                    if (watchHit.HasValue)
+                    {
+                        return Stop("watchpoint", registers.Value);
+                    }
+
+                    var breakpoint = IsBreakpointHit(ParseWord(registers.Value.Pc), registers.Value);
+                    if (!breakpoint.IsSuccess)
+                    {
+                        return DebugResult<ContinueResult>.Failure(breakpoint.Error!.Code, breakpoint.Error.Message);
+                    }
+
+                    if (breakpoint.Value)
+                    {
+                        return Stop("breakpoint", registers.Value);
+                    }
+
+                    if (registers.Value.Halted)
+                    {
+                        return Stop("halt", registers.Value);
+                    }
+
+                    if (completed(registers.Value))
+                    {
+                        return Stop(completedReason, registers.Value);
+                    }
+                }
+
+                var final = ReadRegisters();
+                return final.IsSuccess
+                    ? Stop("maxInstructions", final.Value)
+                    : DebugResult<ContinueResult>.Failure(final.Error!.Code, final.Error.Message);
+            }
+            finally
+            {
+                DetachReadObserver();
+            }
+        }
+
+        private void AttachReadObserverIfNeeded()
+        {
+            trackReads = false;
+            if (watchpoints.HasEnabledReadWatchpoints)
+            {
+                gameboy.Mmu.ReadObserver = OnMemoryRead;
+            }
+        }
+
+        private void DetachReadObserver()
+        {
+            if (gameboy != null)
+            {
+                gameboy.Mmu.ReadObserver = null;
+            }
+
+            trackReads = false;
+        }
+
+        private static DebugResult<ContinueResult> Stop(string reason, CpuRegisters registers) =>
+            DebugResult<ContinueResult>.Success(new ContinueResult(true, reason, registers.Pc, registers));
+
+        private static bool IsCallOrRst(byte opcode, out int length)
+        {
+            length = opcode is 0xCD or 0xC4 or 0xCC or 0xD4 or 0xDC ? 3 : 1;
+            return opcode is 0xCD or 0xC4 or 0xCC or 0xD4 or 0xDC
+                or 0xC7 or 0xCF or 0xD7 or 0xDF or 0xE7 or 0xEF or 0xF7 or 0xFF;
+        }
+
+        private static string ToWatchpointModeName(WatchpointMode mode) => mode switch
+        {
+            WatchpointMode.Read => "read",
+            WatchpointMode.Write => "write",
+            WatchpointMode.Access => "access",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null),
+        };
 
         private static DebugResult<byte> ToButtonMask(IReadOnlyList<JoypadButton> pressedButtons)
         {
@@ -901,6 +1189,25 @@ namespace GameBoy.Debug.Emulator
             public byte Value { get; }
 
             public ulong Count { get; }
+        }
+
+        private readonly struct WatchHit
+        {
+            public WatchHit(ushort address, WatchpointMode mode, ushort pc, byte? value)
+            {
+                Address = address;
+                Mode = mode;
+                Pc = pc;
+                Value = value;
+            }
+
+            public ushort Address { get; }
+
+            public WatchpointMode Mode { get; }
+
+            public ushort Pc { get; }
+
+            public byte? Value { get; }
         }
 
         private sealed class ConditionContext : IBreakpointConditionContext
