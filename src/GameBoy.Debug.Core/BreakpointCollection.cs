@@ -28,6 +28,9 @@ public sealed class BreakpointCollection
 
     public bool Contains(ushort address) => byId.Values.Any(breakpoint => breakpoint.Enabled && breakpoint.AddressValue == address);
 
+    public bool HasBreakpointAt(ushort address) =>
+        byId.Count > 0 && byId.Values.Any(breakpoint => breakpoint.Enabled && breakpoint.AddressValue == address);
+
     public BreakpointInfo? Find(ushort address)
     {
         return byId.Values.FirstOrDefault(breakpoint => breakpoint.Enabled && breakpoint.AddressValue == address);

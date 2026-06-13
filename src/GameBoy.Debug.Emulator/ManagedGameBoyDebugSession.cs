@@ -237,27 +237,38 @@ namespace GameBoy.Debug.Emulator
 
             for (var i = 0; i < maxInstructions; i++)
             {
-                var registers = ReadRegisters();
-                if (!registers.IsSuccess)
+                var cpu = gameboy.Cpu;
+                var pc = (ushort)cpu.Registers.PC;
+
+                // Fast path: only materialize the full register set when we actually need it
+                // (a breakpoint sits at this PC, or we are about to stop). This avoids formatting
+                // ~16 hex strings on every single instruction.
+                if (breakpoints.HasBreakpointAt(pc))
                 {
-                    return DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
+                    var registers = ReadRegisters();
+                    if (!registers.IsSuccess)
+                    {
+                        return DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
+                    }
+
+                    var hit = IsBreakpointHit(pc, registers.Value);
+                    if (!hit.IsSuccess)
+                    {
+                        return DebugResult<ContinueResult>.Failure(hit.Error!.Code, hit.Error.Message);
+                    }
+
+                    if (hit.Value)
+                    {
+                        return Stop("breakpoint", registers.Value);
+                    }
                 }
 
-                var pc = ParseWord(registers.Value.Pc);
-                var hit = IsBreakpointHit(pc, registers.Value);
-                if (!hit.IsSuccess)
+                if (cpu.State == State.HALTED || cpu.State == State.STOPPED)
                 {
-                    return DebugResult<ContinueResult>.Failure(hit.Error!.Code, hit.Error.Message);
-                }
-
-                if (hit.Value)
-                {
-                    return Stop("breakpoint", registers.Value);
-                }
-
-                if (registers.Value.Halted)
-                {
-                    return Stop("halt", registers.Value);
+                    var halted = ReadRegisters();
+                    return halted.IsSuccess
+                        ? Stop("halt", halted.Value)
+                        : DebugResult<ContinueResult>.Failure(halted.Error!.Code, halted.Error.Message);
                 }
 
                 StepOnce();
