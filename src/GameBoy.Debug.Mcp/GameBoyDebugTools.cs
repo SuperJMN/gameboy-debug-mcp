@@ -129,6 +129,30 @@ public static class GameBoyDebugTools
         return ToToolResult(session.ContinueUntilBreak(maxInstructions));
     }
 
+    [McpServerTool(Name = "step_over", ReadOnly = false, Destructive = false)]
+    [Description("Steps over a call-like instruction, or steps one instruction when not on a call.")]
+    public static object StepOver(IGameBoyDebugSession session, int maxInstructions = 100_000)
+    {
+        if (maxInstructions is < 1 or > MaxContinueInstructions)
+        {
+            return Error("invalid_max_instructions", $"maxInstructions must be between 1 and {MaxContinueInstructions}.");
+        }
+
+        return ToToolResult(session.StepOver(maxInstructions));
+    }
+
+    [McpServerTool(Name = "step_out", ReadOnly = false, Destructive = false)]
+    [Description("Runs until the current subroutine returns, a breakpoint/watchpoint hits, halt, or the instruction limit.")]
+    public static object StepOut(IGameBoyDebugSession session, int maxInstructions = 100_000)
+    {
+        if (maxInstructions is < 1 or > MaxContinueInstructions)
+        {
+            return Error("invalid_max_instructions", $"maxInstructions must be between 1 and {MaxContinueInstructions}.");
+        }
+
+        return ToToolResult(session.StepOut(maxInstructions));
+    }
+
     [McpServerTool(Name = "set_breakpoint", ReadOnly = false, Destructive = false)]
     [Description("Sets an execution breakpoint at a 16-bit CPU address.")]
     public static object SetBreakpoint(IGameBoyDebugSession session, string address, string? condition = null)
@@ -162,6 +186,38 @@ public static class GameBoyDebugTools
     [McpServerTool(Name = "list_breakpoints", ReadOnly = true, Destructive = false)]
     [Description("Lists all breakpoints currently registered in the active session.")]
     public static object ListBreakpoints(IGameBoyDebugSession session) => ToToolResult(session.ListBreakpoints());
+
+    [McpServerTool(Name = "set_watchpoint", ReadOnly = false, Destructive = false)]
+    [Description("Sets a memory watchpoint at a 16-bit CPU address. mode is read, write, or access.")]
+    public static object SetWatchpoint(IGameBoyDebugSession session, string address, string mode = "write")
+    {
+        var parsed = ParseAddress(address);
+        if (!parsed.IsSuccess)
+        {
+            return new ToolError(parsed.Error!);
+        }
+
+        var parsedMode = ParseWatchpointMode(mode);
+        return parsedMode.IsSuccess
+            ? ToToolResult(session.SetWatchpoint(parsed.Value.Address, parsedMode.Value))
+            : new ToolError(parsedMode.Error!);
+    }
+
+    [McpServerTool(Name = "clear_watchpoint", ReadOnly = false, Destructive = false)]
+    [Description("Clears a watchpoint by watchpoint id.")]
+    public static object ClearWatchpoint(IGameBoyDebugSession session, string watchpointId)
+    {
+        if (string.IsNullOrWhiteSpace(watchpointId))
+        {
+            return Error("invalid_watchpoint_id", "watchpointId is required.");
+        }
+
+        return ToToolResult(session.ClearWatchpoint(watchpointId));
+    }
+
+    [McpServerTool(Name = "list_watchpoints", ReadOnly = true, Destructive = false)]
+    [Description("Lists all watchpoints currently registered in the active session.")]
+    public static object ListWatchpoints(IGameBoyDebugSession session) => ToToolResult(session.ListWatchpoints());
 
     [McpServerTool(Name = "get_state", ReadOnly = true, Destructive = false)]
     [Description("Returns ROM load status, ROM metadata, halt status, and current PC when available.")]
@@ -347,6 +403,22 @@ public static class GameBoyDebugTools
     }
 
     private static DebugResult<GameBoyAddress> ParseAddress(string address) => GameBoyAddress.Parse(address);
+
+    private static DebugResult<WatchpointMode> ParseWatchpointMode(string mode)
+    {
+        if (string.IsNullOrWhiteSpace(mode))
+        {
+            return DebugResult<WatchpointMode>.Failure("invalid_watchpoint_mode", "Watchpoint mode must be read, write, or access.");
+        }
+
+        return mode.Trim().ToLowerInvariant() switch
+        {
+            "read" => DebugResult<WatchpointMode>.Success(WatchpointMode.Read),
+            "write" => DebugResult<WatchpointMode>.Success(WatchpointMode.Write),
+            "access" => DebugResult<WatchpointMode>.Success(WatchpointMode.Access),
+            _ => DebugResult<WatchpointMode>.Failure("invalid_watchpoint_mode", "Watchpoint mode must be read, write, or access."),
+        };
+    }
 
     private static DebugResult<IReadOnlyList<JoypadButton>> ParseButtons(IReadOnlyList<string>? buttons)
     {

@@ -264,6 +264,46 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
         }
     }
 
+    public DebugResult<ContinueResult> StepOver(int maxInstructions)
+    {
+        var before = ReadRegisters();
+        if (!before.IsSuccess)
+        {
+            return DebugResult<ContinueResult>.Failure(before.Error!.Code, before.Error.Message);
+        }
+
+        var pc = ParseWord(before.Value.Pc);
+        var opcode = ReadBytes(pc, 1);
+        if (!opcode.IsSuccess)
+        {
+            return DebugResult<ContinueResult>.Failure(opcode.Error!.Code, opcode.Error.Message);
+        }
+
+        if (!IsCallOrRst(opcode.Value[0], out var length))
+        {
+            return StepSingle("step");
+        }
+
+        var returnAddress = (ushort)(pc + length);
+        var startSp = ParseWord(before.Value.Sp);
+        return StepUntil(
+            maxInstructions,
+            registers => ParseWord(registers.Pc) == returnAddress && ParseWord(registers.Sp) >= startSp,
+            "step_over");
+    }
+
+    public DebugResult<ContinueResult> StepOut(int maxInstructions)
+    {
+        var before = ReadRegisters();
+        if (!before.IsSuccess)
+        {
+            return DebugResult<ContinueResult>.Failure(before.Error!.Code, before.Error.Message);
+        }
+
+        var startSp = ParseWord(before.Value.Sp);
+        return StepUntil(maxInstructions, registers => ParseWord(registers.Sp) > startSp, "step_out");
+    }
+
     public DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition)
     {
         if (!BreakpointCondition.TryParse(condition, out var parsedCondition, out var conditionError))
@@ -291,6 +331,21 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
             .ToArray();
 
         return DebugResult<ListBreakpointsResult>.Success(new ListBreakpointsResult(entries));
+    }
+
+    public DebugResult<WatchpointSetResult> SetWatchpoint(ushort address, WatchpointMode mode)
+    {
+        return DebugResult<WatchpointSetResult>.Failure("watchpoints_not_supported", "Watchpoints are only supported by the managed backend.");
+    }
+
+    public DebugResult<ClearWatchpointResult> ClearWatchpoint(string watchpointId)
+    {
+        return DebugResult<ClearWatchpointResult>.Failure("watchpoints_not_supported", "Watchpoints are only supported by the managed backend.");
+    }
+
+    public DebugResult<ListWatchpointsResult> ListWatchpoints()
+    {
+        return DebugResult<ListWatchpointsResult>.Success(new ListWatchpointsResult([]));
     }
 
     public DebugResult<SessionStateResult> GetState()
@@ -599,6 +654,101 @@ public sealed class SameBoyDebugSession : IGameBoyDebugSession, IDisposable
         }
 
         return DebugResult<bool>.Success(false);
+    }
+
+    private DebugResult<ContinueResult> StepSingle(string reason)
+    {
+        var step = StepOnce();
+        if (!step.IsSuccess)
+        {
+            return DebugResult<ContinueResult>.Failure(step.Error!.Code, step.Error.Message);
+        }
+
+        var registers = ReadRegisters();
+        if (!registers.IsSuccess)
+        {
+            return DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
+        }
+
+        var breakpoint = IsBreakpointHit(ParseWord(registers.Value.Pc), registers.Value);
+        if (!breakpoint.IsSuccess)
+        {
+            return DebugResult<ContinueResult>.Failure(breakpoint.Error!.Code, breakpoint.Error.Message);
+        }
+
+        if (breakpoint.Value)
+        {
+            return Stop("breakpoint", registers.Value);
+        }
+
+        return registers.Value.Halted ? Stop("halt", registers.Value) : Stop(reason, registers.Value);
+    }
+
+    private DebugResult<ContinueResult> StepUntil(int maxInstructions, Func<CpuRegisters, bool> completed, string completedReason)
+    {
+        for (var i = 0; i < maxInstructions; i++)
+        {
+            var before = ReadRegisters();
+            if (!before.IsSuccess)
+            {
+                return DebugResult<ContinueResult>.Failure(before.Error!.Code, before.Error.Message);
+            }
+
+            if (before.Value.Halted)
+            {
+                return Stop("halt", before.Value);
+            }
+
+            var step = StepOnce();
+            if (!step.IsSuccess)
+            {
+                return DebugResult<ContinueResult>.Failure(step.Error!.Code, step.Error.Message);
+            }
+
+            var registers = ReadRegisters();
+            if (!registers.IsSuccess)
+            {
+                return DebugResult<ContinueResult>.Failure(registers.Error!.Code, registers.Error.Message);
+            }
+
+            var breakpoint = IsBreakpointHit(ParseWord(registers.Value.Pc), registers.Value);
+            if (!breakpoint.IsSuccess)
+            {
+                return DebugResult<ContinueResult>.Failure(breakpoint.Error!.Code, breakpoint.Error.Message);
+            }
+
+            if (breakpoint.Value)
+            {
+                return Stop("breakpoint", registers.Value);
+            }
+
+            if (registers.Value.Halted)
+            {
+                return Stop("halt", registers.Value);
+            }
+
+            if (completed(registers.Value))
+            {
+                return Stop(completedReason, registers.Value);
+            }
+        }
+
+        var final = ReadRegisters();
+        return final.IsSuccess
+            ? Stop("maxInstructions", final.Value)
+            : DebugResult<ContinueResult>.Failure(final.Error!.Code, final.Error.Message);
+    }
+
+    private static DebugResult<ContinueResult> Stop(string reason, CpuRegisters registers)
+    {
+        return DebugResult<ContinueResult>.Success(new ContinueResult(true, reason, registers.Pc, registers));
+    }
+
+    private static bool IsCallOrRst(byte opcode, out int length)
+    {
+        length = opcode is 0xCD or 0xC4 or 0xCC or 0xD4 or 0xDC ? 3 : 1;
+        return opcode is 0xCD or 0xC4 or 0xCC or 0xD4 or 0xDC
+            or 0xC7 or 0xCF or 0xD7 or 0xDF or 0xE7 or 0xEF or 0xF7 or 0xFF;
     }
 
     private DebugResult<byte[]> ReadBytes(ushort address, int length)

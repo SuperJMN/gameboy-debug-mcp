@@ -92,6 +92,8 @@ Implemented tools:
 - `load_state`
 - `reset`
 - `step_instruction`
+- `step_over`
+- `step_out`
 - `run_frame`
 - `set_joypad`
 - `press_buttons`
@@ -99,6 +101,9 @@ Implemented tools:
 - `set_breakpoint`
 - `clear_breakpoint`
 - `list_breakpoints`
+- `set_watchpoint`
+- `clear_watchpoint`
+- `list_watchpoints`
 - `get_state`
 - `read_registers`
 - `read_memory`
@@ -156,4 +161,3 @@ dnx dotnetdeployer.tool            # add --dry-run to pack without publishing
 ```
 
 CI/CD is provided by [DotnetDeployer.Fleet](https://github.com/SuperJMN/DotnetDeployer.Fleet): a coordinator/worker that clones the repo and runs DotnetDeployer on every commit. Any worker with the .NET 10 SDK can build and publish the package.
-

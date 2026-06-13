@@ -78,6 +78,23 @@ public sealed record BreakpointEntry(
     [property: JsonPropertyName("enabled")] bool Enabled,
     [property: JsonPropertyName("condition")] string? Condition);
 
+public sealed record WatchpointSetResult(
+    [property: JsonPropertyName("watchpointId")] string WatchpointId,
+    [property: JsonPropertyName("address")] string Address,
+    [property: JsonPropertyName("mode")] string Mode,
+    [property: JsonPropertyName("enabled")] bool Enabled);
+
+public sealed record ClearWatchpointResult([property: JsonPropertyName("cleared")] bool Cleared);
+
+public sealed record ListWatchpointsResult(
+    [property: JsonPropertyName("watchpoints")] IReadOnlyList<WatchpointEntry> Watchpoints);
+
+public sealed record WatchpointEntry(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("address")] string Address,
+    [property: JsonPropertyName("mode")] string Mode,
+    [property: JsonPropertyName("enabled")] bool Enabled);
+
 public sealed record SessionStateResult(
     [property: JsonPropertyName("romLoaded")] bool RomLoaded,
     [property: JsonPropertyName("title")] string? Title,

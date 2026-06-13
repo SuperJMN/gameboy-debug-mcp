@@ -54,6 +54,16 @@ public sealed class SynchronizedGameBoyDebugSession(IGameBoyDebugSession inner) 
         lock (gate) { return inner.ContinueUntilBreak(maxInstructions); }
     }
 
+    public DebugResult<ContinueResult> StepOver(int maxInstructions)
+    {
+        lock (gate) { return inner.StepOver(maxInstructions); }
+    }
+
+    public DebugResult<ContinueResult> StepOut(int maxInstructions)
+    {
+        lock (gate) { return inner.StepOut(maxInstructions); }
+    }
+
     public DebugResult<BreakpointSetResult> SetBreakpoint(ushort address, string? condition)
     {
         lock (gate) { return inner.SetBreakpoint(address, condition); }
@@ -67,6 +77,21 @@ public sealed class SynchronizedGameBoyDebugSession(IGameBoyDebugSession inner) 
     public DebugResult<ListBreakpointsResult> ListBreakpoints()
     {
         lock (gate) { return inner.ListBreakpoints(); }
+    }
+
+    public DebugResult<WatchpointSetResult> SetWatchpoint(ushort address, WatchpointMode mode)
+    {
+        lock (gate) { return inner.SetWatchpoint(address, mode); }
+    }
+
+    public DebugResult<ClearWatchpointResult> ClearWatchpoint(string watchpointId)
+    {
+        lock (gate) { return inner.ClearWatchpoint(watchpointId); }
+    }
+
+    public DebugResult<ListWatchpointsResult> ListWatchpoints()
+    {
+        lock (gate) { return inner.ListWatchpoints(); }
     }
 
     public DebugResult<SessionStateResult> GetState()

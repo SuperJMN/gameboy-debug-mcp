@@ -166,6 +166,104 @@ public sealed class ManagedGameBoyDebugSessionIntegrationTests
         }
     }
 
+    [Fact]
+    public void Write_watchpoint_stops_continue_until_break()
+    {
+        var romPath = CreateTestFilePath("managed-watchpoint", ".gb");
+        CreateMinimalRom(romPath);
+
+        try
+        {
+            using var session = new ManagedGameBoyDebugSession();
+            Assert.True(session.LoadRom(romPath).IsSuccess);
+
+            var watchpoint = session.SetWatchpoint(0xC000, WatchpointMode.Write);
+            Assert.True(watchpoint.IsSuccess, watchpoint.Error?.Message);
+
+            var continued = session.ContinueUntilBreak(16);
+
+            Assert.True(continued.IsSuccess, continued.Error?.Message);
+            Assert.Equal("watchpoint", continued.Value.Reason);
+        }
+        finally
+        {
+            File.Delete(romPath);
+        }
+    }
+
+    [Fact]
+    public void Lists_and_clears_watchpoints()
+    {
+        using var session = new ManagedGameBoyDebugSession();
+
+        var watchpoint = session.SetWatchpoint(0xC000, WatchpointMode.Access);
+        Assert.True(watchpoint.IsSuccess, watchpoint.Error?.Message);
+
+        var listed = session.ListWatchpoints();
+        Assert.True(listed.IsSuccess, listed.Error?.Message);
+        var entry = Assert.Single(listed.Value.Watchpoints);
+        Assert.Equal("wp-1", entry.Id);
+        Assert.Equal("0xC000", entry.Address);
+        Assert.Equal("access", entry.Mode);
+        Assert.True(entry.Enabled);
+
+        var cleared = session.ClearWatchpoint(watchpoint.Value.WatchpointId);
+        Assert.True(cleared.IsSuccess, cleared.Error?.Message);
+        Assert.True(cleared.Value.Cleared);
+        Assert.Empty(session.ListWatchpoints().Value.Watchpoints);
+    }
+
+    [Fact]
+    public void Step_over_call_stops_at_instruction_after_call()
+    {
+        var romPath = CreateTestFilePath("managed-step-over", ".gb");
+        CreateCallRom(romPath);
+
+        try
+        {
+            using var session = new ManagedGameBoyDebugSession();
+            Assert.True(session.LoadRom(romPath).IsSuccess);
+
+            var result = session.StepOver(100);
+
+            Assert.True(result.IsSuccess, result.Error?.Message);
+            Assert.Equal("step_over", result.Value.Reason);
+            Assert.Equal("0x0103", result.Value.Pc);
+        }
+        finally
+        {
+            File.Delete(romPath);
+        }
+    }
+
+    [Fact]
+    public void Step_out_from_subroutine_returns_to_caller()
+    {
+        var romPath = CreateTestFilePath("managed-step-out", ".gb");
+        CreateCallRom(romPath);
+
+        try
+        {
+            using var session = new ManagedGameBoyDebugSession();
+            Assert.True(session.LoadRom(romPath).IsSuccess);
+            var stepInto = session.StepInstruction(1);
+            Assert.True(stepInto.IsSuccess, stepInto.Error?.Message);
+            Assert.Equal("0x0150", stepInto.Value.PcAfter);
+            var spInsideSubroutine = stepInto.Value.Registers.Sp;
+
+            var result = session.StepOut(100);
+
+            Assert.True(result.IsSuccess, result.Error?.Message);
+            Assert.Equal("step_out", result.Value.Reason);
+            Assert.Equal("0x0103", result.Value.Pc);
+            Assert.True(ParseWord(result.Value.Registers.Sp) > ParseWord(spInsideSubroutine));
+        }
+        finally
+        {
+            File.Delete(romPath);
+        }
+    }
+
     private static string CreateTestFilePath(string prefix, string extension)
     {
         var directory = Path.Combine(Path.GetTempPath(), "gameboy-mcp-tests");
@@ -190,4 +288,26 @@ public sealed class ManagedGameBoyDebugSessionIntegrationTests
         rom[0x149] = 0x00;
         File.WriteAllBytes(path, rom);
     }
+
+    private static void CreateCallRom(string path)
+    {
+        var rom = Enumerable.Repeat((byte)0x00, 0x8000).ToArray();
+        rom[0x100] = 0xCD; // CALL 0x0150
+        rom[0x101] = 0x50;
+        rom[0x102] = 0x01;
+        rom[0x103] = 0x18; // JR -2
+        rom[0x104] = 0xFE;
+        rom[0x150] = 0x00; // NOP
+        rom[0x151] = 0x00; // NOP
+        rom[0x152] = 0xC9; // RET
+        var title = "MCPCALL"u8.ToArray();
+        Array.Copy(title, 0, rom, 0x134, title.Length);
+        rom[0x147] = 0x00;
+        rom[0x148] = 0x00;
+        rom[0x149] = 0x00;
+        File.WriteAllBytes(path, rom);
+    }
+
+    private static ushort ParseWord(string value) =>
+        (ushort)Convert.ToInt32(value.Replace("0x", string.Empty, StringComparison.OrdinalIgnoreCase), 16);
 }
